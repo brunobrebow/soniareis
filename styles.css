@@ -1,0 +1,310 @@
+/* styles.css — Sonia Reis CRM */
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #f0f0f0;
+}
+
+/* ─── LOGIN ─── */
+#login-screen {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(160deg, #FBEAF0 0%, #fff 60%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 999;
+}
+.login-wrapper { width: 100%; max-width: 380px; }
+.login-card { background: #fff; border-radius: 24px; padding: 40px 32px 36px; border: 1px solid #f0e0e8; text-align: center; }
+.login-logo { font-size: 48px; margin-bottom: 16px; display: block; }
+.login-title { font-size: 24px; font-weight: 700; color: #1a1a1a; margin-bottom: 4px; }
+.login-sub { font-size: 14px; color: #aaa; }
+.login-card .form-group { text-align: left; }
+
+/* ─── APP SHELL ─── */
+#app {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: row;
+  background: #fff;
+  max-width: 430px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+#sidebar { display: none; }
+
+/* #main = the column between sidebar and edge, holds topbar + screen */
+#main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ─── TOPBAR — fixed at top, never scrolls ─── */
+#topbar {
+  flex-shrink: 0;
+  background: #fff;
+  border-bottom: 1px solid #f0f0f0;
+  z-index: 10;
+}
+.topbar-inner { padding: 20px 20px 12px; }
+.topbar-row { display: flex; align-items: center; justify-content: space-between; }
+.topbar-row h2 { font-size: 24px; font-weight: 600; color: #1a1a1a; }
+.topbar-row p { font-size: 13px; color: #888; margin-top: 2px; }
+.add-btn { width: 42px; height: 42px; border-radius: 50%; background: #D4537E; border: none; color: white; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+/* ─── SEARCH ─── */
+.search-box { margin: 8px 20px 12px; position: relative; }
+.search-box input { width: 100%; padding: 11px 16px 11px 42px; border: 1px solid #e8e8e8; border-radius: 12px; font-size: 15px; background: #f9f9f9; color: #1a1a1a; outline: none; }
+.search-box input:focus { border-color: #D4537E; background: #fff; }
+.search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 16px; }
+
+/* Filter tabs inside topbar */
+.filter-tabs-header { display: flex; gap: 8px; padding: 4px 20px 12px; overflow-x: auto; }
+.filter-tab { padding: 8px 18px; border-radius: 20px; font-size: 13px; border: 1px solid #e8e8e8; background: none; cursor: pointer; color: #888; white-space: nowrap; }
+.filter-tab.active { background: #D4537E; border-color: #D4537E; color: white; font-weight: 600; }
+
+/* ─── SCREEN — the ONLY scrollable area ─── */
+.screen {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  background: #fff;
+}
+
+/* ─── SECTION LABEL ─── */
+.section-label { font-size: 11px; font-weight: 600; color: #aaa; padding: 16px 20px 8px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+/* ─── CONTACT LIST ─── */
+.contact-item { display: flex; align-items: center; gap: 14px; padding: 14px 20px; border-bottom: 1px solid #f5f5f5; cursor: pointer; }
+.contact-item:active, .contact-item:hover { background: #fafafa; }
+.avatar { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; flex-shrink: 0; }
+.contact-info { flex: 1; min-width: 0; }
+.contact-name { font-size: 16px; font-weight: 500; color: #1a1a1a; }
+.contact-sub { font-size: 13px; color: #888; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chevron { color: #ccc; font-size: 18px; }
+
+/* ─── BADGES ─── */
+.badge { font-size: 11px; padding: 4px 9px; border-radius: 20px; font-weight: 600; white-space: nowrap; }
+.badge-due { background: #FBEAF0; color: #993556; }
+.badge-ok { background: #EAF3DE; color: #3B6D11; }
+.badge-late { background: #FCEBEB; color: #A32D2D; }
+
+/* ─── BOTTOM NAV — fixed at bottom, never scrolls ─── */
+.bottomnav {
+  flex-shrink: 0;
+  height: 74px;
+  background: #ffffff;
+  border-top: 1px solid #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 0 8px env(safe-area-inset-bottom, 8px);
+}
+.nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; padding: 8px 20px; border-radius: 12px; flex: 1; }
+.nav-item.active { background: #FBEAF0; }
+.nav-icon { font-size: 22px; }
+.nav-label { font-size: 11px; color: #aaa; }
+.nav-item.active .nav-label { color: #993556; font-weight: 600; }
+
+/* ─── CHARGE CARDS ─── */
+.charge-item { margin: 0 16px 12px; background: #fff; border: 1px solid #f0f0f0; border-radius: 14px; padding: 14px 16px; }
+.charge-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.charge-name { font-size: 16px; font-weight: 500; color: #1a1a1a; flex: 1; }
+.charge-body { display: flex; align-items: center; justify-content: space-between; }
+.charge-detail { font-size: 13px; color: #888; }
+.charge-amount { font-size: 22px; font-weight: 600; color: #1a1a1a; }
+.charge-actions { display: flex; gap: 8px; margin-top: 12px; }
+.btn-cobrar { flex: 1; padding: 12px; background: #25D366; border: none; border-radius: 10px; color: white; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.btn-pago { flex: 1; padding: 12px; background: #f5f5f5; border: 1px solid #e8e8e8; border-radius: 10px; color: #1a1a1a; font-size: 14px; font-weight: 500; cursor: pointer; }
+
+/* ─── FINANCIAL ─── */
+.metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px; }
+.metric-card { background: #f9f9f9; border-radius: 14px; padding: 14px; }
+.metric-label { font-size: 12px; color: #aaa; margin-bottom: 6px; }
+.metric-value { font-size: 22px; font-weight: 600; color: #1a1a1a; }
+.metric-sub { font-size: 11px; color: #aaa; margin-top: 4px; }
+.upcoming-list { padding: 0 16px; }
+.upcoming-item { display: flex; align-items: center; justify-content: space-between; padding: 13px 0; border-bottom: 1px solid #f5f5f5; }
+.upcoming-name { font-size: 15px; color: #1a1a1a; font-weight: 500; }
+.upcoming-date { font-size: 12px; color: #aaa; margin-top: 2px; }
+.upcoming-val { font-size: 16px; font-weight: 600; color: #1a1a1a; }
+
+/* ─── DETAIL VIEW ─── */
+.detail-overlay {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.detail-header { flex-shrink: 0; padding: 20px 16px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #f0f0f0; background: #fff; }
+.detail-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.back-btn { width: 38px; height: 38px; border-radius: 50%; border: 1px solid #e8e8e8; background: none; cursor: pointer; font-size: 20px; color: #1a1a1a; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.detail-avatar { width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 600; flex-shrink: 0; }
+.detail-section { padding: 16px; border-bottom: 1px solid #f5f5f5; }
+.detail-section h3 { font-size: 11px; font-weight: 600; color: #aaa; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+.info-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid #f9f9f9; }
+.info-label { font-size: 14px; color: #888; }
+.info-value { font-size: 14px; color: #1a1a1a; font-weight: 500; }
+.sale-item { background: #f9f9f9; border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+.sale-desc { font-size: 15px; font-weight: 600; color: #1a1a1a; }
+.sale-meta { font-size: 12px; color: #aaa; margin-top: 4px; }
+.parcel-row { display: flex; align-items: center; padding: 7px 0; border-bottom: 1px solid #f0f0f0; }
+.parcel-num { font-size: 13px; color: #aaa; width: 60px; }
+.parcel-date { font-size: 13px; color: #1a1a1a; flex: 1; }
+.parcel-status { display: flex; align-items: center; gap: 8px; }
+.btn-delete-contact { width: calc(100% - 32px); margin: 16px; padding: 14px; background: none; border: 1px solid #FCEBEB; border-radius: 13px; color: #A32D2D; font-size: 15px; font-weight: 500; cursor: pointer; }
+.btn-delete-contact:hover { background: #FCEBEB; }
+
+/* ─── MODALS ─── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; display: flex; align-items: flex-end; justify-content: center; }
+.modal-sheet { background: #fff; border-radius: 20px 20px 0 0; padding: 24px 20px 32px; width: 100%; max-width: 430px; max-height: 90vh; overflow-y: auto; }
+.modal-title { font-size: 20px; font-weight: 600; color: #1a1a1a; margin-bottom: 6px; }
+.modal-subtitle { font-size: 14px; color: #888; margin-bottom: 14px; }
+
+/* ─── FORMS ─── */
+.form-group { margin-bottom: 14px; }
+.form-label { font-size: 13px; color: #888; margin-bottom: 6px; display: block; font-weight: 500; }
+.form-input { width: 100%; padding: 13px 14px; border: 1px solid #e8e8e8; border-radius: 12px; font-size: 15px; background: #f9f9f9; color: #1a1a1a; outline: none; -webkit-appearance: none; }
+.form-input:focus { border-color: #D4537E; background: #fff; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn-primary { width: 100%; padding: 15px; background: #D4537E; border: none; border-radius: 13px; color: white; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 6px; }
+.btn-danger { width: 100%; padding: 15px; background: #A32D2D; border: none; border-radius: 13px; color: white; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 6px; }
+.btn-cancel { width: 100%; padding: 12px; background: none; border: none; color: #888; font-size: 15px; cursor: pointer; margin-top: 6px; }
+
+/* ─── WHATSAPP ─── */
+.wpp-msg { background: #EAF3DE; border-radius: 12px; padding: 14px; margin: 12px 0; font-size: 13px; color: #27500A; line-height: 1.6; }
+
+/* ─── MISC ─── */
+.empty-state { text-align: center; padding: 48px 20px; color: #bbb; font-size: 14px; line-height: 1.6; }
+.spinner { width: 32px; height: 32px; border: 3px solid #f0f0f0; border-top-color: #D4537E; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); color: white; padding: 13px 18px; border-radius: 13px; font-size: 14px; font-weight: 500; z-index: 300; text-align: center; opacity: 0; transition: opacity 0.3s; pointer-events: none; min-width: 200px; }
+.toast.show { opacity: 1; }
+
+
+/* ════════════════════════════════════
+   TABLET — 768px+
+════════════════════════════════════ */
+@media (min-width: 768px) and (max-width: 1023px) {
+  #app { max-width: 600px; }
+  .topbar-row h2 { font-size: 26px; }
+  .contact-name { font-size: 17px; }
+  .avatar { width: 52px; height: 52px; }
+  .metric-value { font-size: 26px; }
+}
+
+
+/* ════════════════════════════════════
+   DESKTOP — 1024px+
+════════════════════════════════════ */
+@media (min-width: 1024px) {
+  html, body { overflow: auto; }
+
+  #app {
+    position: relative;
+    inset: auto;
+    left: auto;
+    transform: none;
+    max-width: 100%;
+    width: 100%;
+    min-height: 100vh;
+    flex-direction: row;
+  }
+
+  #login-screen { background: linear-gradient(160deg, #FBEAF0 0%, #f5f3f0 100%); }
+  .login-card { box-shadow: 0 8px 40px rgba(212,83,126,0.08); }
+
+  /* Sidebar */
+  #sidebar {
+    display: flex; flex-direction: column;
+    width: 260px; min-width: 260px; min-height: 100vh;
+    background: #fff; border-right: 1px solid #f0f0f0;
+    padding: 36px 20px 24px;
+    position: sticky; top: 0; height: 100vh;
+    overflow-y: auto; flex-shrink: 0;
+  }
+  .sidebar-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 36px; padding: 0 8px; }
+  .sidebar-logo { width: 40px; height: 40px; border-radius: 12px; background: #D4537E; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+  .sidebar-title { font-size: 16px; font-weight: 700; color: #1a1a1a; line-height: 1.2; }
+  .sidebar-title span { display: block; font-size: 12px; font-weight: 400; color: #aaa; }
+  .sidebar-nav { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+  .sidebar-item { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 12px; cursor: pointer; color: #666; font-size: 16px; font-weight: 500; }
+  .sidebar-item:hover { background: #f9f9f9; }
+  .sidebar-item.active { background: #FBEAF0; color: #993556; }
+  .sidebar-icon { font-size: 22px; width: 28px; text-align: center; }
+  .sidebar-footer { border-top: 1px solid #f0f0f0; padding-top: 16px; margin-top: 16px; }
+  .sidebar-user { font-size: 13px; color: #aaa; padding: 8px 16px; }
+  .sidebar-logout { width: 100%; padding: 10px 16px; background: none; border: 1px solid #e8e8e8; border-radius: 10px; color: #888; font-size: 14px; cursor: pointer; margin-top: 6px; }
+  .sidebar-logout:hover { background: #FCEBEB; border-color: #FCEBEB; color: #A32D2D; }
+
+  .bottomnav { display: none; }
+
+  #main { flex: 1; display: flex; flex-direction: column; min-height: 100vh; overflow: visible; }
+
+  #topbar { position: sticky; top: 0; z-index: 10; }
+
+  .screen { flex: 1; overflow-y: visible; max-width: 860px; background: #fff; border-right: 1px solid #f0f0f0; }
+
+  /* Larger fonts */
+  .topbar-inner { padding: 32px 32px 20px; }
+  .topbar-row h2 { font-size: 32px; }
+  .topbar-row p { font-size: 15px; }
+  .search-box { margin: 8px 32px 12px; }
+  .search-box input { font-size: 16px; padding: 13px 18px 13px 48px; }
+  .search-icon { font-size: 18px; left: 16px; }
+  .filter-tabs-header { padding: 4px 32px 12px; }
+  .section-label { padding: 20px 32px 10px; font-size: 12px; }
+  .contact-item { padding: 18px 32px; gap: 18px; }
+  .contact-name { font-size: 18px; }
+  .contact-sub { font-size: 14px; }
+  .avatar { width: 54px; height: 54px; font-size: 18px; }
+  .badge { font-size: 12px; padding: 5px 12px; }
+  .charge-item { margin: 0 32px 16px; padding: 18px 20px; }
+  .charge-name { font-size: 18px; }
+  .charge-detail { font-size: 14px; }
+  .charge-amount { font-size: 26px; }
+  .btn-cobrar, .btn-pago { font-size: 15px; padding: 14px; }
+  .metric-grid { grid-template-columns: repeat(4, 1fr); gap: 16px; padding: 24px 32px; }
+  .metric-value { font-size: 28px; }
+  .metric-label { font-size: 13px; }
+  .metric-card { padding: 18px; }
+  .upcoming-list { padding: 0 32px; }
+  .upcoming-name { font-size: 17px; }
+  .upcoming-val { font-size: 18px; }
+  .detail-header { padding: 28px 32px 20px; }
+  .detail-section { padding: 20px 32px; }
+  .info-label, .info-value { font-size: 16px; }
+  .sale-desc { font-size: 17px; }
+  .parcel-num, .parcel-date { font-size: 14px; }
+  .btn-delete-contact { width: calc(100% - 64px); margin: 20px 32px; }
+  .modal-overlay { align-items: center; }
+  .modal-sheet { border-radius: 20px; max-width: 480px; padding: 32px; }
+  .modal-title { font-size: 22px; }
+  .form-input { font-size: 16px; padding: 14px 16px; }
+  .btn-primary, .btn-danger { font-size: 17px; padding: 16px; }
+  .add-btn { width: 46px; height: 46px; font-size: 26px; }
+  .toast { bottom: 32px; }
+}
+
+@media (min-width: 1400px) {
+  .screen { max-width: 960px; }
+  #sidebar { width: 280px; min-width: 280px; }
+}
