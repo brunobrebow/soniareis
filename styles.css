@@ -78,7 +78,7 @@ body {
 .topbar-row { display: flex; align-items: center; justify-content: space-between; }
 .topbar h2 { font-size: 24px; font-weight: 600; color: #1a1a1a; }
 .topbar p { font-size: 13px; color: #888; margin-top: 2px; }
-.add-btn { width: 42px; height: 42px; border-radius: 50%; background: #D4537E; border: none; color: white; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.add-btn { width: 42px; height: 42px; border-radius: 50%; background: #D4537E; border: none; color: white; font-size: 26px; font-weight: 300; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; line-height: 1; padding: 0; padding-bottom: 2px; }
 
 /* ─── SEARCH ─── */
 .search-box { margin: 12px 0 0; position: relative; }

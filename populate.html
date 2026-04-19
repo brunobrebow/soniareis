@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Popular banco</title></head>
+<body style="font-family:sans-serif;padding:40px;background:#111;color:#0f0">
+<h2>Populando banco de dados...</h2>
+<pre id="log"></pre>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+const sb = window.supabase.createClient('https://gqlzorjnggghvrohratk.supabase.co','sb_publishable_PgWFevBuqOX1byr13SFmsA_9mLDu98u');
+const log = document.getElementById('log');
+function l(m){log.textContent+=m+'\n';log.scrollTop=log.scrollHeight;}
+
+const contacts = [
+  {name:"Maria Aparecida",local:"UBS Central",phone:"5543991001001"},
+  {name:"Ana Paula Santos",local:"Hospital Municipal",phone:"5543991002002"},
+  {name:"Fernanda Lima",local:"Escola Estadual",phone:"5543991003003"},
+  {name:"Patrícia Oliveira",local:"Farmácia São João",phone:"5543991004004"},
+  {name:"Cláudia Ferreira",local:"Mercado Bom Preço",phone:"5543991005005"},
+  {name:"Rosana Martins",local:"Salão Beleza Pura",phone:"5543991006006"},
+  {name:"Juliana Costa",local:"Posto de Saúde 2",phone:"5543991007007"},
+  {name:"Beatriz Almeida",local:"Clínica Odonto",phone:"5543991008008"},
+  {name:"Tatiane Souza",local:"Loja de Roupas Moda",phone:"5543991009009"},
+  {name:"Vanessa Rocha",local:"Padaria Estrela",phone:"5543991010010"},
+  {name:"Débora Nascimento",local:"Creche Municipal",phone:"5543991011011"},
+  {name:"Regina Carvalho",local:"Oficina Mecânica RC",phone:"5543991012012"},
+  {name:"Sandra Ribeiro",local:"Pet Shop Amigo",phone:"5543991013013"},
+  {name:"Elaine Pereira",local:"Açougue Central",phone:"5543991014014"},
+  {name:"Mariana Dias",local:"Restaurante Sabor",phone:"5543991015015"},
+  {name:"Lúcia Mendes",local:"Papelaria Criativa",phone:"5543991016016"},
+  {name:"Simone Araújo",local:"Lavanderia Express",phone:"5543991017017"},
+  {name:"Cristina Barbosa",local:"Lanchonete da Cris",phone:"5543991018018"},
+  {name:"Adriana Campos",local:"Academia FitLife",phone:"5543991019019"},
+  {name:"Renata Teixeira",local:"Costura e Arte",phone:"5543991020020"},
+];
+
+const sales = [
+  [{desc:"Colar de pérolas",total:450,parcels:3,pv:150,day:10,paid:1},{desc:"Brinco de ouro",total:280,parcels:4,pv:70,day:15,paid:2}],
+  [{desc:"Anel de prata com zircônia",total:320,parcels:5,pv:64,day:5,paid:3},{desc:"Pulseira de ouro",total:600,parcels:6,pv:100,day:20,paid:1}],
+  [{desc:"Conjunto colar e brinco",total:520,parcels:4,pv:130,day:10,paid:0},{desc:"Anel solitário",total:380,parcels:3,pv:127,day:25,paid:1}],
+  [{desc:"Corrente de prata",total:150,parcels:2,pv:75,day:5,paid:2},{desc:"Pingente coração",total:90,parcels:3,pv:30,day:15,paid:1}],
+  [{desc:"Aliança de compromisso",total:700,parcels:5,pv:140,day:10,paid:2},{desc:"Brinco argola grande",total:180,parcels:3,pv:60,day:20,paid:3}],
+  [{desc:"Gargantilha de ouro",total:850,parcels:6,pv:142,day:5,paid:3},{desc:"Anel com pedra ametista",total:230,parcels:4,pv:58,day:15,paid:0}],
+  [{desc:"Pulseira riviera",total:490,parcels:5,pv:98,day:10,paid:4},{desc:"Brinco de pérola",total:120,parcels:2,pv:60,day:25,paid:1}],
+  [{desc:"Conjunto 3 anéis",total:340,parcels:4,pv:85,day:5,paid:1},{desc:"Colar choker",total:160,parcels:3,pv:54,day:20,paid:2}],
+  [{desc:"Tornozeleira de ouro",total:280,parcels:4,pv:70,day:10,paid:0},{desc:"Brinco gota cristal",total:95,parcels:2,pv:48,day:15,paid:1}],
+  [{desc:"Anel aparador",total:190,parcels:3,pv:64,day:5,paid:3},{desc:"Corrente groumet",total:420,parcels:5,pv:84,day:25,paid:2}],
+  [{desc:"Pingente letra inicial",total:75,parcels:2,pv:38,day:10,paid:0},{desc:"Pulseira berloques",total:310,parcels:4,pv:78,day:20,paid:1}],
+  [{desc:"Brinco argola ouro",total:350,parcels:3,pv:117,day:5,paid:2},{desc:"Colar longo com pedras",total:480,parcels:6,pv:80,day:15,paid:4}],
+  [{desc:"Anel meia aliança",total:550,parcels:5,pv:110,day:10,paid:3},{desc:"Brinco ear cuff",total:130,parcels:2,pv:65,day:25,paid:0}],
+  [{desc:"Pulseira de ouro 18k",total:780,parcels:6,pv:130,day:5,paid:2},{desc:"Pingente olho grego",total:85,parcels:3,pv:29,day:20,paid:1}],
+  [{desc:"Conjunto brinco e anel",total:430,parcels:4,pv:108,day:10,paid:4},{desc:"Corrente cartier",total:350,parcels:5,pv:70,day:15,paid:0}],
+  [{desc:"Gargantilha ponto de luz",total:260,parcels:3,pv:87,day:5,paid:1},{desc:"Brinco pérola barroca",total:200,parcels:4,pv:50,day:25,paid:2}],
+  [{desc:"Anel formatura",total:650,parcels:5,pv:130,day:10,paid:1},{desc:"Pulseira rígida",total:180,parcels:3,pv:60,day:20,paid:3}],
+  [{desc:"Colar com pingente",total:290,parcels:4,pv:73,day:5,paid:0},{desc:"Brinco de pressão",total:110,parcels:2,pv:55,day:15,paid:2}],
+  [{desc:"Aliança de ouro",total:900,parcels:6,pv:150,day:10,paid:5},{desc:"Tornozeleira prata",total:140,parcels:3,pv:47,day:25,paid:1}],
+  [{desc:"Broche vintage",total:220,parcels:3,pv:74,day:5,paid:2},{desc:"Conjunto festa completo",total:680,parcels:5,pv:136,day:20,paid:1}],
+];
+
+(async()=>{
+  for(let i=0;i<contacts.length;i++){
+    const c = contacts[i];
+    const {data:cd,error:ce} = await sb.from('contacts').insert([c]).select().single();
+    if(ce){l('ERRO contato '+c.name+': '+ce.message);continue;}
+    l((i+1)+'/20 Contato: '+cd.name);
+    for(const s of sales[i]){
+      const {data:sd,error:se} = await sb.from('sales').insert([{
+        contact_id:cd.id, description:s.desc, total:s.total,
+        parcels:s.parcels, parcel_value:s.pv, start_day:s.day, payment_method:'pix'
+      }]).select().single();
+      if(se){l('  ERRO venda: '+se.message);continue;}
+      const rows=[];
+      for(let p=0;p<s.parcels;p++){
+        rows.push({sale_id:sd.id,parcel_index:p,paid:p<s.paid,paid_at:p<s.paid?new Date().toISOString():null});
+      }
+      await sb.from('payments').insert(rows);
+      l('  Venda: '+s.desc+' ('+s.parcels+'x R$'+s.pv+', '+s.paid+' pagas)');
+    }
+  }
+  l('\n✅ PRONTO! Pode fechar esta página e voltar ao CRM.');
+})();
+</script></body></html>
