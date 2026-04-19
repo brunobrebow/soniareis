@@ -42,7 +42,7 @@ let state = {
   detail: null,
   modal: null,
   modalExtra: null,
-  chargeFilter: 'hoje',
+  chargeFilter: 'mes',
   chargeModal: null,
   paidModal: null,
   deleteContactModal: null,
@@ -439,10 +439,56 @@ function renderContatos() {
 }
 
 function renderCobrancas() {
-  const charges = getDueCharges(state.chargeFilter);
-  const todayCount = getDueCharges('hoje').length;
-  const lateCount = getDueCharges('atrasado').length;
-  const filters = [{ id: 'hoje', label: 'Hoje' }, { id: 'atrasado', label: 'Atrasado' }, { id: 'mes', label: 'Este mês' }];
+  const allCharges = getDueCharges('mes');
+  const lateCharges = allCharges.filter(c => c.isPast);
+  const upcomingCharges = allCharges.filter(c => !c.isPast);
+  const lateCount = lateCharges.length;
+  const todayCount = allCharges.filter(c => c.isToday).length;
+
+  const filters = [{ id: 'mes', label: 'Este mês' }, { id: 'atrasado', label: 'Atrasado' }, { id: 'hoje', label: 'Hoje' }];
+
+  // Determine which charges to show based on filter
+  let charges;
+  if (state.chargeFilter === 'atrasado') charges = lateCharges;
+  else if (state.chargeFilter === 'hoje') charges = allCharges.filter(c => c.isToday);
+  else charges = allCharges;
+
+  // Group by day
+  const diasSemana = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+  const groups = [];
+  let currentKey = null;
+  let currentGroup = null;
+
+  // For "mes" filter: show atrasados first, then by day
+  const sorted = [...charges].sort((a, b) => {
+    if (a.isPast && !b.isPast) return -1;
+    if (!a.isPast && b.isPast) return 1;
+    return a.parcel.date - b.parcel.date;
+  });
+
+  sorted.forEach(charge => {
+    let key, label;
+    if (charge.isPast) {
+      key = 'atrasado';
+      label = '⚠️ Atrasado';
+    } else {
+      const d = charge.parcel.date;
+      key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      const diaSemana = diasSemana[d.getDay()];
+      const diaNum = d.getDate();
+      if (charge.isToday) {
+        label = `Hoje, ${diaNum}`;
+      } else {
+        label = `${diaSemana} ${diaNum}`;
+      }
+    }
+    if (key !== currentKey) {
+      currentKey = key;
+      currentGroup = { label, isPast: charge.isPast, items: [] };
+      groups.push(currentGroup);
+    }
+    currentGroup.items.push(charge);
+  });
 
   return `
     <div class="screen-fixed-header">
@@ -455,37 +501,39 @@ function renderCobrancas() {
       <div class="filter-tabs">
         ${filters.map(f => `<button class="filter-tab ${state.chargeFilter === f.id ? 'active' : ''}" onclick="setChargeFilter('${f.id}')">${f.label}</button>`).join('')}
       </div>
-      <div style="height:12px"></div>
     </div>
     <div class="screen-scroll-list">
       ${charges.length === 0 ? `<div class="empty-state">Nenhuma cobrança para este filtro 🎉</div>` : ''}
-      ${charges.map(({ sale, parcel, contact, isPast, isToday }) => {
-      if (!contact) return '';
-      const ci = getColorIndex(contact.id);
-      const msg = getWhatsappMsg(contact, parcel, sale);
-      const wppUrl = `https://wa.me/${contact.phone}?text=${encodeURIComponent(msg)}`;
-      return `
-        <div class="charge-item">
-          <div class="charge-header">
-            <div class="avatar" style="width:38px;height:38px;font-size:13px;background:${COLORS[ci]};color:${TEXT_COLORS[ci]}">${getInitials(contact.name)}</div>
-            <span class="charge-name">${contact.name.split(' ').slice(0, 2).join(' ')}</span>
-            <span class="badge ${isPast ? 'badge-late' : isToday ? 'badge-due' : 'badge-ok'}">${isPast ? 'Atrasado' : isToday ? 'Hoje' : parcel.dateStr}</span>
-          </div>
-          <div class="charge-body">
-            <div>
-              <div class="charge-detail">${sale.description}</div>
-              <div class="charge-detail" style="margin-top:2px">Parc. ${parcel.index + 1}/${sale.parcels} · ${parcel.dateStr}</div>
-            </div>
-            <div class="charge-amount">R$ ${parcel.amount}</div>
-          </div>
-          <div class="charge-actions">
-            <button class="btn-cobrar" onclick="openWpp('${wppUrl}')">
-              <span style="font-size:16px">💬</span> Cobrar
-            </button>
-            <button class="btn-pago" onclick="openPaidModal('${sale.id}',${parcel.index})">Marcar pago</button>
-          </div>
-        </div>`;
-    }).join('')}
+      ${groups.map(group => `
+        <div class="section-label" style="padding-top:14px;${group.isPast ? 'color:#A32D2D' : ''}">${group.label}</div>
+        ${group.items.map(({ sale, parcel, contact, isPast, isToday }) => {
+          if (!contact) return '';
+          const ci = getColorIndex(contact.id);
+          const msg = getWhatsappMsg(contact, parcel, sale);
+          const wppUrl = `https://wa.me/${contact.phone}?text=${encodeURIComponent(msg)}`;
+          return `
+            <div class="charge-item">
+              <div class="charge-header">
+                <div class="avatar" style="width:38px;height:38px;font-size:13px;background:${COLORS[ci]};color:${TEXT_COLORS[ci]}">${getInitials(contact.name)}</div>
+                <span class="charge-name">${contact.name.split(' ').slice(0, 2).join(' ')}</span>
+                <span class="badge ${isPast ? 'badge-late' : isToday ? 'badge-due' : 'badge-ok'}">${isPast ? 'Atrasado' : isToday ? 'Hoje' : 'Dia ' + parcel.date.getDate()}</span>
+              </div>
+              <div class="charge-body">
+                <div>
+                  <div class="charge-detail">${sale.description}</div>
+                  <div class="charge-detail" style="margin-top:2px">Parc. ${parcel.index + 1}/${sale.parcels}</div>
+                </div>
+                <div class="charge-amount">R$ ${parcel.amount}</div>
+              </div>
+              <div class="charge-actions">
+                <button class="btn-cobrar" onclick="openWpp('${wppUrl}')">
+                  <span style="font-size:16px">💬</span> Cobrar
+                </button>
+                <button class="btn-pago" onclick="openPaidModal('${sale.id}',${parcel.index})">Marcar pago</button>
+              </div>
+            </div>`;
+        }).join('')}
+      `).join('')}
     </div>`;
 }
 
