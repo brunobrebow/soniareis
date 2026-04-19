@@ -17,15 +17,10 @@
   <!-- Login screen -->
   <div id="login-screen"></div>
 
-  <!-- App -->
+  <!-- App (hidden until logged in) -->
   <div id="app" style="display:none">
     <aside id="sidebar"></aside>
-
-    <div id="main">
-      <header id="topbar"></header>
-      <div class="screen" id="screen"></div>
-    </div>
-
+    <div class="screen" id="screen"></div>
     <nav class="bottomnav" id="bottomnav"></nav>
     <div id="toast" class="toast"></div>
   </div>
@@ -35,6 +30,7 @@
   <script src="auth.js"></script>
   <script src="db.js"></script>
   <script src="app.js"></script>
+
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));

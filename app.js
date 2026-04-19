@@ -13,6 +13,7 @@ let state = {
   modal: null,
   modalExtra: null,
   chargeFilter: 'hoje',
+  chargeModal: null,
   paidModal: null,
   deleteContactModal: null,
   loading: true,
@@ -42,9 +43,15 @@ function renderLogin() {
         <button class="btn-primary" onclick="doLogin()">Entrar</button>
       </div>
     </div>`;
+
+  // Allow Enter key to submit
   setTimeout(() => {
-    document.getElementById('l-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
-    document.getElementById('l-user').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('l-pass').focus(); });
+    document.getElementById('l-pass').addEventListener('keydown', e => {
+      if (e.key === 'Enter') doLogin();
+    });
+    document.getElementById('l-user').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('l-pass').focus();
+    });
   }, 100);
 }
 
@@ -78,7 +85,9 @@ async function init() {
 
 async function loadData() {
   const [contacts, sales, payments] = await Promise.all([
-    DB.getContacts(), DB.getSales(), DB.getPayments()
+    DB.getContacts(),
+    DB.getSales(),
+    DB.getPayments()
   ]);
   state.contacts = contacts;
   state.sales = sales;
@@ -88,7 +97,11 @@ async function loadData() {
 // ---------- HELPERS ----------
 
 function getContact(id) { return state.contacts.find(c => c.id === id); }
-function getInitials(name) { return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase(); }
+
+function getInitials(name) {
+  return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
+}
+
 function getColorIndex(id) {
   let hash = 0;
   for (let i = 0; i < id.length; i++) hash += id.charCodeAt(i);
@@ -97,39 +110,61 @@ function getColorIndex(id) {
 
 function getSaleParcels(sale) {
   const today = new Date();
-  const paidIndexes = state.payments.filter(p => p.sale_id === sale.id && p.paid).map(p => p.parcel_index);
+  const m = today.getMonth();
+  const y = today.getFullYear();
+  const paidIndexes = state.payments
+    .filter(p => p.sale_id === sale.id && p.paid)
+    .map(p => p.parcel_index);
+
   return Array.from({ length: sale.parcels }, (_, i) => {
-    const d = new Date(today.getFullYear(), today.getMonth() - paidIndexes.length + i, sale.start_day);
-    return { index: i, date: d, dateStr: d.toLocaleDateString('pt-BR'), paid: paidIndexes.includes(i), amount: sale.parcel_value };
+    const d = new Date(y, m - paidIndexes.length + i, sale.start_day);
+    return {
+      index: i,
+      date: d,
+      dateStr: d.toLocaleDateString('pt-BR'),
+      paid: paidIndexes.includes(i),
+      amount: sale.parcel_value
+    };
   });
 }
 
 function getDueCharges(filter) {
   const today = new Date();
-  const todayNum = today.getDate(), m = today.getMonth(), y = today.getFullYear();
+  const todayNum = today.getDate();
+  const m = today.getMonth();
+  const y = today.getFullYear();
   const result = [];
+
   state.sales.forEach(sale => {
-    getSaleParcels(sale).forEach(p => {
+    const parcels = getSaleParcels(sale);
+    parcels.forEach(p => {
       if (p.paid) return;
-      const isToday = p.date.getDate() === todayNum && p.date.getMonth() === m && p.date.getFullYear() === y;
+      const day = p.date.getDate();
+      const mo = p.date.getMonth();
+      const yr = p.date.getFullYear();
+      const isToday = day === todayNum && mo === m && yr === y;
       const isPast = p.date < today && !isToday;
-      const isUpcoming = p.date > today && p.date.getMonth() === m;
+      const isUpcoming = p.date > today && mo === m;
       if (filter === 'hoje' && !isToday) return;
       if (filter === 'atrasado' && !isPast) return;
       if (filter === 'mes' && !(isToday || isUpcoming || isPast)) return;
       result.push({ sale, parcel: p, contact: getContact(sale.contact_id), isPast, isToday });
     });
   });
-  return result.sort((a, b) => a.parcel.date - b.parcel.date);
+
+  result.sort((a, b) => a.parcel.date - b.parcel.date);
+  return result;
 }
 
 function getWhatsappMsg(contact, parcel, sale) {
-  return `Olá ${contact.name.split(' ')[0]}! Esta é uma mensagem de cobrança referente à parcela que vence hoje, dia ${parcel.dateStr}, no valor de R$ ${parcel.amount},00.\n\nCaso queira pagar por Pix, utilize a chave: ${CONFIG.pix}\n\nApós o pagamento, por favor me envie o comprovante. Obrigada! 💖`;
+  const firstName = contact.name.split(' ')[0];
+  return `Olá ${firstName}! Esta é uma mensagem de cobrança referente à parcela que vence hoje, dia ${parcel.dateStr}, no valor de R$ ${parcel.amount},00.\n\nCaso queira pagar por Pix, utilize a chave: ${CONFIG.pix}\n\nApós o pagamento, por favor me envie o comprovante. Obrigada! 💖`;
 }
 
 function showToast(msg, color = '#3B6D11') {
   const t = document.getElementById('toast');
-  t.textContent = msg; t.style.background = color;
+  t.textContent = msg;
+  t.style.background = color;
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2500);
 }
@@ -142,10 +177,15 @@ async function addContact() {
   const phone = document.getElementById('nc-phone').value.replace(/\D/g, '');
   if (!name || !local || !phone) { showToast('Preencha todos os campos', '#A32D2D'); return; }
   try {
-    const c = await DB.addContact({ name, local, phone: '55' + phone });
-    state.contacts.push(c);
-    closeModal(); showToast('Cliente cadastrada!'); render();
-  } catch (e) { showToast('Erro ao salvar.', '#A32D2D'); console.error(e); }
+    const newContact = await DB.addContact({ name, local, phone: '55' + phone });
+    state.contacts.push(newContact);
+    closeModal();
+    showToast('Cliente cadastrada!');
+    render();
+  } catch (e) {
+    showToast('Erro ao salvar. Tente novamente.', '#A32D2D');
+    console.error(e);
+  }
 }
 
 async function addSale() {
@@ -156,12 +196,25 @@ async function addSale() {
   const contactId = document.getElementById('ns-contact')?.value || state.modalExtra || state.contacts[0]?.id;
   if (!desc || !total || !contactId) { showToast('Preencha todos os campos', '#A32D2D'); return; }
   try {
-    const s = await DB.addSale({ contact_id: contactId, description: desc, total, parcels, parcel_value: Math.round(total / parcels), start_day: day, payment_method: 'pix' });
-    state.sales.push(s);
-    const pmts = await DB.initPayments(s.id, parcels);
-    state.payments.push(...pmts);
-    closeModal(); showToast('Venda registrada!'); render();
-  } catch (e) { showToast('Erro ao salvar.', '#A32D2D'); console.error(e); }
+    const newSale = await DB.addSale({
+      contact_id: contactId,
+      description: desc,
+      total,
+      parcels,
+      parcel_value: Math.round(total / parcels),
+      start_day: day,
+      payment_method: 'pix'
+    });
+    state.sales.push(newSale);
+    const newPayments = await DB.initPayments(newSale.id, parcels);
+    state.payments.push(...newPayments);
+    closeModal();
+    showToast('Venda registrada!');
+    render();
+  } catch (e) {
+    showToast('Erro ao salvar. Tente novamente.', '#A32D2D');
+    console.error(e);
+  }
 }
 
 async function markPaid(saleId, parcelIndex) {
@@ -170,8 +223,12 @@ async function markPaid(saleId, parcelIndex) {
     const p = state.payments.find(p => p.sale_id === saleId && p.parcel_index === parcelIndex);
     if (p) { p.paid = true; p.paid_at = new Date().toISOString(); }
     state.paidModal = null;
-    showToast('Parcela marcada como paga!'); render();
-  } catch (e) { showToast('Erro ao atualizar.', '#A32D2D'); console.error(e); }
+    showToast('Parcela marcada como paga!');
+    render();
+  } catch (e) {
+    showToast('Erro ao atualizar. Tente novamente.', '#A32D2D');
+    console.error(e);
+  }
 }
 
 async function confirmDeleteContact() {
@@ -179,14 +236,18 @@ async function confirmDeleteContact() {
   if (!id) return;
   try {
     await DB.deleteContact(id);
-    const saleIds = state.sales.filter(s => s.contact_id === id).map(s => s.id);
     state.contacts = state.contacts.filter(c => c.id !== id);
+    const saleIds = state.sales.filter(s => s.contact_id === id).map(s => s.id);
     state.sales = state.sales.filter(s => s.contact_id !== id);
     state.payments = state.payments.filter(p => !saleIds.includes(p.sale_id));
     state.deleteContactModal = null;
     state.detail = null;
-    showToast('Cliente excluída.'); render();
-  } catch (e) { showToast('Erro ao excluir.', '#A32D2D'); console.error(e); }
+    showToast('Cliente excluída.');
+    render();
+  } catch (e) {
+    showToast('Erro ao excluir. Tente novamente.', '#A32D2D');
+    console.error(e);
+  }
 }
 
 // ---------- NAVIGATION ----------
@@ -196,72 +257,48 @@ function updateSearch(v) { state.search = v; render(); }
 function openDetail(id) { state.detail = id; render(); }
 function closeDetail() { state.detail = null; render(); }
 function openModal(m, extra) { state.modal = m; state.modalExtra = extra || null; render(); }
-function closeModal() { state.modal = null; state.paidModal = null; state.deleteContactModal = null; render(); }
+function closeModal() { state.modal = null; state.chargeModal = null; state.paidModal = null; state.deleteContactModal = null; render(); }
 function setChargeFilter(f) { state.chargeFilter = f; render(); }
 function openPaidModal(saleId, parcelIndex) { state.paidModal = { saleId, parcelIndex }; render(); }
 function openDeleteContactModal(id) { state.deleteContactModal = id; render(); }
-function openWpp(url) { window.open(url, '_blank'); }
+function openWpp(url) { window.open(url, '_blank'); closeModal(); }
 
 // ---------- RENDER ----------
 
 function render() {
-  const topbar = document.getElementById('topbar');
   const screen = document.getElementById('screen');
   const nav = document.getElementById('bottomnav');
   const sidebar = document.getElementById('sidebar');
   if (!screen) return;
 
   if (state.loading) {
-    if (topbar) topbar.innerHTML = '';
     screen.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;padding:60px 20px;flex-direction:column;gap:16px">
-      <div class="spinner"></div><p style="color:#888;font-size:15px">Carregando...</p></div>`;
+      <div class="spinner"></div>
+      <p style="color:#888;font-size:15px">Carregando...</p>
+    </div>`;
     if (nav) nav.innerHTML = '';
     if (sidebar) sidebar.innerHTML = '';
     return;
   }
 
   if (state.error) {
-    if (topbar) topbar.innerHTML = '';
     screen.innerHTML = `<div style="padding:40px 20px;text-align:center">
       <p style="color:#A32D2D;font-size:15px;margin-bottom:12px">${state.error}</p>
-      <button onclick="init()" style="padding:10px 20px;background:#D4537E;color:white;border:none;border-radius:10px;font-size:14px;cursor:pointer">Tentar novamente</button></div>`;
+      <button onclick="init()" style="padding:10px 20px;background:#D4537E;color:white;border:none;border-radius:10px;font-size:14px;cursor:pointer">Tentar novamente</button>
+    </div>`;
+    if (nav) nav.innerHTML = '';
+    if (sidebar) sidebar.innerHTML = '';
     return;
   }
 
-  // Render topbar into #topbar (fixed header)
-  if (topbar) {
-    if (state.tab === 'contatos') topbar.innerHTML = renderTopbarContatos();
-    else if (state.tab === 'cobrancas') topbar.innerHTML = renderTopbarCobrancas();
-    else topbar.innerHTML = renderTopbarFinanceiro();
-  }
+  let html = '';
+  if (state.tab === 'contatos') html = renderContatos();
+  else if (state.tab === 'cobrancas') html = renderCobrancas();
+  else html = renderFinanceiro();
 
-  // Render scrollable content into #screen
-  if (state.tab === 'contatos') screen.innerHTML = renderListContatos();
-  else if (state.tab === 'cobrancas') screen.innerHTML = renderListCobrancas();
-  else screen.innerHTML = renderListFinanceiro();
-
-  // Render detail overlay inside #main
-  const main = document.getElementById('main');
-  const existing = document.getElementById('detail-overlay');
-  if (existing) existing.remove();
-  if (state.detail && main) {
-    const div = document.createElement('div');
-    div.id = 'detail-overlay';
-    div.innerHTML = renderDetail(state.detail);
-    main.appendChild(div);
-  }
-
-  // Modals
-  const existingModal = document.getElementById('modal-root');
-  if (existingModal) existingModal.remove();
-  const modalHtml = renderModal();
-  if (modalHtml) {
-    const div = document.createElement('div');
-    div.id = 'modal-root';
-    div.innerHTML = modalHtml;
-    document.body.appendChild(div);
-  }
-
+  if (state.detail) html += renderDetail(state.detail);
+  html += renderModal();
+  screen.innerHTML = html;
   renderNav();
 }
 
@@ -271,6 +308,7 @@ function renderNav() {
     { id: 'cobrancas', icon: '💰', label: 'Cobranças' },
     { id: 'financeiro', icon: '📊', label: 'Financeiro' }
   ];
+
   const nav = document.getElementById('bottomnav');
   if (nav) {
     nav.innerHTML = tabs.map(t => `
@@ -279,6 +317,7 @@ function renderNav() {
         <span class="nav-label">${t.label}</span>
       </div>`).join('');
   }
+
   const sidebar = document.getElementById('sidebar');
   if (sidebar) {
     sidebar.innerHTML = `
@@ -289,7 +328,8 @@ function renderNav() {
       <nav class="sidebar-nav">
         ${tabs.map(t => `
           <div class="sidebar-item ${state.tab === t.id ? 'active' : ''}" onclick="switchTab('${t.id}')">
-            <span class="sidebar-icon">${t.icon}</span>${t.label}
+            <span class="sidebar-icon">${t.icon}</span>
+            ${t.label}
           </div>`).join('')}
       </nav>
       <div class="sidebar-footer">
@@ -299,47 +339,9 @@ function renderNav() {
   }
 }
 
-// ---------- TOPBARS (fixed header content) ----------
+// ---------- SCREENS ----------
 
-function renderTopbarContatos() {
-  return `<div class="topbar-inner">
-    <div class="topbar-row">
-      <div><h2>Contatos</h2><p>${state.contacts.length} clientes cadastradas</p></div>
-      <button class="add-btn" onclick="openModal('addContact')">+</button>
-    </div>
-    <div class="search-box" style="margin:8px 0 0">
-      <span class="search-icon">🔍</span>
-      <input type="text" placeholder="Buscar por nome ou local..." value="${state.search}" oninput="updateSearch(this.value)">
-    </div>
-  </div>`;
-}
-
-function renderTopbarCobrancas() {
-  const todayCount = getDueCharges('hoje').length;
-  const lateCount = getDueCharges('atrasado').length;
-  const filters = [{ id: 'hoje', label: 'Hoje' }, { id: 'atrasado', label: 'Atrasado' }, { id: 'mes', label: 'Este mês' }];
-  return `<div class="topbar-inner">
-    <div class="topbar-row">
-      <div><h2>Cobranças</h2><p>${todayCount} vencem hoje · ${lateCount} em atraso</p></div>
-      <button class="add-btn" onclick="openModal('addSale')">+</button>
-    </div>
-  </div>
-  <div class="filter-tabs-header">
-    ${filters.map(f => `<button class="filter-tab ${state.chargeFilter === f.id ? 'active' : ''}" onclick="setChargeFilter('${f.id}')">${f.label}</button>`).join('')}
-  </div>`;
-}
-
-function renderTopbarFinanceiro() {
-  return `<div class="topbar-inner">
-    <div class="topbar-row">
-      <div><h2>Financeiro</h2><p>Visão geral</p></div>
-    </div>
-  </div>`;
-}
-
-// ---------- LISTS (scrollable content) ----------
-
-function renderListContatos() {
+function renderContatos() {
   const filtered = state.contacts.filter(c =>
     c.name.toLowerCase().includes(state.search.toLowerCase()) ||
     (c.local || '').toLowerCase().includes(state.search.toLowerCase())
@@ -349,7 +351,18 @@ function renderListContatos() {
     const pending = getSaleParcels(s).filter(p => !p.paid).length;
     if (pending) pendingByContact[s.contact_id] = (pendingByContact[s.contact_id] || 0) + pending;
   });
+
   return `
+    <div class="topbar">
+      <div class="topbar-row">
+        <div><h2>Contatos</h2><p>${state.contacts.length} clientes cadastradas</p></div>
+        <button class="add-btn" onclick="openModal('addContact')">+</button>
+      </div>
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" placeholder="Buscar por nome ou local..." value="${state.search}" oninput="updateSearch(this.value)">
+      </div>
+    </div>
     <div class="section-label">Todas as clientes</div>
     ${filtered.length === 0 ? `<div class="empty-state">Nenhuma cliente encontrada.<br>Toque em + para adicionar.</div>` : ''}
     ${filtered.map(c => {
@@ -368,9 +381,22 @@ function renderListContatos() {
     }).join('')}`;
 }
 
-function renderListCobrancas() {
+function renderCobrancas() {
   const charges = getDueCharges(state.chargeFilter);
+  const todayCount = getDueCharges('hoje').length;
+  const lateCount = getDueCharges('atrasado').length;
+  const filters = [{ id: 'hoje', label: 'Hoje' }, { id: 'atrasado', label: 'Atrasado' }, { id: 'mes', label: 'Este mês' }];
+
   return `
+    <div class="topbar">
+      <div class="topbar-row">
+        <div><h2>Cobranças</h2><p>${todayCount} vencem hoje · ${lateCount} em atraso</p></div>
+        <button class="add-btn" onclick="openModal('addSale')">+</button>
+      </div>
+    </div>
+    <div class="filter-tabs">
+      ${filters.map(f => `<button class="filter-tab ${state.chargeFilter === f.id ? 'active' : ''}" onclick="setChargeFilter('${f.id}')">${f.label}</button>`).join('')}
+    </div>
     <div style="height:12px"></div>
     ${charges.length === 0 ? `<div class="empty-state">Nenhuma cobrança para este filtro 🎉</div>` : ''}
     ${charges.map(({ sale, parcel, contact, isPast, isToday }) => {
@@ -393,55 +419,65 @@ function renderListCobrancas() {
             <div class="charge-amount">R$ ${parcel.amount}</div>
           </div>
           <div class="charge-actions">
-            <button class="btn-cobrar" onclick="openWpp('${wppUrl}')"><span style="font-size:16px">💬</span> Cobrar</button>
+            <button class="btn-cobrar" onclick="openWpp('${wppUrl}')">
+              <span style="font-size:16px">💬</span> Cobrar
+            </button>
             <button class="btn-pago" onclick="openPaidModal('${sale.id}',${parcel.index})">Marcar pago</button>
           </div>
         </div>`;
     }).join('')}`;
 }
 
-function renderListFinanceiro() {
+function renderFinanceiro() {
   const recebido = state.payments.filter(p => p.paid).reduce((acc, p) => {
-    const s = state.sales.find(s => s.id === p.sale_id);
-    return acc + (s ? s.parcel_value : 0);
+    const sale = state.sales.find(s => s.id === p.sale_id);
+    return acc + (sale ? sale.parcel_value : 0);
   }, 0);
   const pendente = state.payments.filter(p => !p.paid).reduce((acc, p) => {
-    const s = state.sales.find(s => s.id === p.sale_id);
-    return acc + (s ? s.parcel_value : 0);
+    const sale = state.sales.find(s => s.id === p.sale_id);
+    return acc + (sale ? sale.parcel_value : 0);
   }, 0);
   const atrasado = getDueCharges('atrasado').reduce((a, c) => a + c.parcel.amount, 0);
   const upcoming = getDueCharges('mes').slice(0, 8);
+
   return `
+    <div class="topbar">
+      <div class="topbar-row">
+        <div><h2>Financeiro</h2><p>Visão geral</p></div>
+      </div>
+    </div>
     <div class="metric-grid">
       <div class="metric-card"><div class="metric-label">Recebido</div><div class="metric-value" style="color:#3B6D11">R$ ${recebido.toLocaleString('pt-BR')}</div><div class="metric-sub">parcelas pagas</div></div>
       <div class="metric-card"><div class="metric-label">A receber</div><div class="metric-value" style="color:#993556">R$ ${pendente.toLocaleString('pt-BR')}</div><div class="metric-sub">pendente</div></div>
       <div class="metric-card"><div class="metric-label">Em atraso</div><div class="metric-value" style="color:#A32D2D">R$ ${atrasado.toLocaleString('pt-BR')}</div><div class="metric-sub">${getDueCharges('atrasado').length} cobranças</div></div>
       <div class="metric-card"><div class="metric-label">Clientes</div><div class="metric-value">${state.contacts.length}</div><div class="metric-sub">cadastradas</div></div>
     </div>
-    <div class="section-label">Próximas cobranças</div>
+    <div class="section-label" style="margin-top:8px">Próximas cobranças</div>
     <div class="upcoming-list">
       ${upcoming.length === 0 ? `<div class="empty-state" style="padding:20px">Nenhuma cobrança próxima.</div>` : ''}
       ${upcoming.map(({ sale, parcel, contact }) => {
         if (!contact) return '';
-        return `<div class="upcoming-item">
-          <div>
-            <div class="upcoming-name">${contact.name.split(' ').slice(0, 2).join(' ')}</div>
-            <div class="upcoming-date">${sale.description} · ${parcel.dateStr}</div>
-          </div>
-          <div class="upcoming-val">R$ ${parcel.amount}</div>
-        </div>`;
+        return `
+          <div class="upcoming-item">
+            <div>
+              <div class="upcoming-name">${contact.name.split(' ').slice(0, 2).join(' ')}</div>
+              <div class="upcoming-date">${sale.description} · ${parcel.dateStr}</div>
+            </div>
+            <div class="upcoming-val">R$ ${parcel.amount}</div>
+          </div>`;
       }).join('')}
     </div>`;
 }
-
-// ---------- DETAIL ----------
 
 function renderDetail(contactId) {
   const c = getContact(contactId);
   if (!c) return '';
   const ci = getColorIndex(c.id);
   const cSales = state.sales.filter(s => s.contact_id === contactId);
-  const totalPending = cSales.reduce((a, s) => a + getSaleParcels(s).filter(p => !p.paid).reduce((x, p) => x + p.amount, 0), 0);
+  const totalPending = cSales.reduce((a, s) => {
+    return a + getSaleParcels(s).filter(p => !p.paid).reduce((x, p) => x + p.amount, 0);
+  }, 0);
+
   return `
     <div class="detail-overlay">
       <div class="detail-header">
@@ -452,19 +488,19 @@ function renderDetail(contactId) {
           <div style="font-size:13px;color:#888">${c.local || ''}</div>
         </div>
       </div>
-      <div class="detail-body">
-        <div class="detail-section">
-          <h3>Informações</h3>
-          <div class="info-row"><span class="info-label">WhatsApp</span><span class="info-value" style="color:#25D366">+${c.phone}</span></div>
-          <div class="info-row"><span class="info-label">Local</span><span class="info-value">${c.local || '—'}</span></div>
-          <div class="info-row"><span class="info-label">A receber</span><span class="info-value" style="color:${totalPending > 0 ? '#993556' : '#3B6D11'}">R$ ${totalPending.toLocaleString('pt-BR')}</span></div>
-        </div>
-        <div class="detail-section">
-          <h3>Vendas e parcelas</h3>
-          ${cSales.length === 0 ? '<div style="color:#aaa;font-size:14px;padding:8px 0">Nenhuma venda registrada.</div>' : ''}
-          ${cSales.map(s => {
-            const parcels = getSaleParcels(s);
-            return `<div class="sale-item">
+      <div class="detail-section">
+        <h3>Informações</h3>
+        <div class="info-row"><span class="info-label">WhatsApp</span><span class="info-value" style="color:#25D366">+${c.phone}</span></div>
+        <div class="info-row"><span class="info-label">Local</span><span class="info-value">${c.local || '—'}</span></div>
+        <div class="info-row"><span class="info-label">A receber</span><span class="info-value" style="color:${totalPending > 0 ? '#993556' : '#3B6D11'}">R$ ${totalPending.toLocaleString('pt-BR')}</span></div>
+      </div>
+      <div class="detail-section">
+        <h3>Vendas e parcelas</h3>
+        ${cSales.length === 0 ? '<div style="color:#aaa;font-size:14px;padding:8px 0">Nenhuma venda registrada.</div>' : ''}
+        ${cSales.map(s => {
+          const parcels = getSaleParcels(s);
+          return `
+            <div class="sale-item">
               <div class="sale-desc">${s.description}</div>
               <div class="sale-meta">Total: R$ ${s.total} · ${s.parcels}x R$ ${s.parcel_value} · ${s.payment_method === 'pix' ? 'Pix' : 'Cartão'}</div>
               <div style="margin-top:10px">
@@ -479,17 +515,31 @@ function renderDetail(contactId) {
                   </div>`).join('')}
               </div>
             </div>`;
-          }).join('')}
-          <button onclick="openModal('addSale','${contactId}')" style="width:100%;padding:12px;background:none;border:1px solid #D4537E;border-radius:10px;color:#D4537E;font-size:14px;cursor:pointer;margin-top:4px">+ Nova venda</button>
-        </div>
-        <button class="btn-delete-contact" onclick="openDeleteContactModal('${c.id}')">Excluir cliente</button>
+        }).join('')}
+        <button onclick="openModal('addSale','${contactId}')" style="width:100%;padding:12px;background:none;border:1px solid #D4537E;border-radius:10px;color:#D4537E;font-size:14px;cursor:pointer;margin-top:4px">+ Nova venda</button>
       </div>
+      <button class="btn-delete-contact" onclick="openDeleteContactModal('${c.id}')">Excluir cliente</button>
     </div>`;
 }
 
 // ---------- MODALS ----------
 
 function renderModal() {
+  if (state.chargeModal) {
+    const { sale, parcel, contact } = state.chargeModal;
+    const msg = getWhatsappMsg(contact, parcel, sale);
+    const wppUrl = `https://wa.me/${contact.phone}?text=${encodeURIComponent(msg)}`;
+    return `<div class="modal-overlay" onclick="closeModal()">
+      <div class="modal-sheet" onclick="event.stopPropagation()">
+        <div class="modal-title">Cobrar via WhatsApp</div>
+        <div class="modal-subtitle">Mensagem para ${contact.name.split(' ')[0]}:</div>
+        <div class="wpp-msg">${msg.replace(/\n/g, '<br>')}</div>
+        <button class="btn-primary" onclick="openWpp('${wppUrl}')">💬 Abrir WhatsApp</button>
+        <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+      </div>
+    </div>`;
+  }
+
   if (state.paidModal) {
     const { saleId, parcelIndex } = state.paidModal;
     const sale = state.sales.find(s => s.id === saleId);
@@ -502,48 +552,58 @@ function renderModal() {
       </div>
     </div>`;
   }
+
   if (state.deleteContactModal) {
     const c = getContact(state.deleteContactModal);
     const salesCount = state.sales.filter(s => s.contact_id === state.deleteContactModal).length;
     return `<div class="modal-overlay" onclick="closeModal()">
       <div class="modal-sheet" onclick="event.stopPropagation()">
         <div class="modal-title">Excluir cliente</div>
-        <div class="modal-subtitle">Tem certeza que quer excluir <strong>${c?.name}</strong>?
-          ${salesCount > 0 ? `<br><br>⚠️ Isso também vai excluir ${salesCount} venda(s) e todas as parcelas. Não pode ser desfeito.` : '<br><br>Esta ação não pode ser desfeita.'}</div>
+        <div class="modal-subtitle">
+          Tem certeza que quer excluir <strong>${c?.name}</strong>?
+          ${salesCount > 0 ? `<br><br>⚠️ Isso também vai excluir ${salesCount} venda(s) e todas as parcelas. Não pode ser desfeito.` : '<br><br>Esta ação não pode ser desfeita.'}
+        </div>
         <button class="btn-danger" onclick="confirmDeleteContact()">Excluir permanentemente</button>
         <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
       </div>
     </div>`;
   }
+
   if (state.modal === 'addContact') {
     return `<div class="modal-overlay" onclick="closeModal()">
       <div class="modal-sheet" onclick="event.stopPropagation()">
         <div class="modal-title">Nova cliente</div>
         <div class="form-group"><label class="form-label">Nome completo</label><input class="form-input" id="nc-name" placeholder="Ex: Renata Lima" /></div>
         <div class="form-group"><label class="form-label">Local</label><input class="form-input" id="nc-local" placeholder="Ex: Posto de Saúde 1" /></div>
-        <div class="form-group"><label class="form-label">WhatsApp (com DDD)</label><input class="form-input" id="nc-phone" type="tel" inputmode="numeric" pattern="[0-9]*" placeholder="43 99999-0000" /></div>
+        <div class="form-group"><label class="form-label">WhatsApp (com DDD)</label><input class="form-input" id="nc-phone" type="tel" placeholder="43 99999-0000" /></div>
         <button class="btn-primary" onclick="addContact()">Cadastrar cliente</button>
         <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
       </div>
     </div>`;
   }
+
   if (state.modal === 'addSale') {
     const contactId = state.modalExtra;
-    const opts = state.contacts.map(c => `<option value="${c.id}" ${c.id === contactId ? 'selected' : ''}>${c.name}</option>`).join('');
+    const contactOptions = state.contacts.map(c =>
+      `<option value="${c.id}" ${c.id === contactId ? 'selected' : ''}>${c.name}</option>`
+    ).join('');
     return `<div class="modal-overlay" onclick="closeModal()">
       <div class="modal-sheet" onclick="event.stopPropagation()">
         <div class="modal-title">Nova venda</div>
-        <div class="form-group"><label class="form-label">Cliente</label><select class="form-input" id="ns-contact">${opts}</select></div>
+        <div class="form-group"><label class="form-label">Cliente</label>
+          <select class="form-input" id="ns-contact">${contactOptions}</select>
+        </div>
         <div class="form-group"><label class="form-label">Descrição da joia</label><input class="form-input" id="ns-desc" placeholder="Ex: Anel Dourado Cristal" /></div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">Total (R$)</label><input class="form-input" id="ns-total" type="number" inputmode="decimal" placeholder="300" /></div>
-          <div class="form-group"><label class="form-label">Parcelas</label><input class="form-input" id="ns-parcels" type="number" inputmode="numeric" placeholder="3" min="1" max="24" /></div>
+          <div class="form-group"><label class="form-label">Total (R$)</label><input class="form-input" id="ns-total" type="number" placeholder="300" /></div>
+          <div class="form-group"><label class="form-label">Parcelas</label><input class="form-input" id="ns-parcels" type="number" placeholder="3" min="1" max="24" /></div>
         </div>
-        <div class="form-group"><label class="form-label">Dia de cobrança</label><input class="form-input" id="ns-day" type="number" inputmode="numeric" placeholder="28" min="1" max="31" /></div>
+        <div class="form-group"><label class="form-label">Dia de cobrança</label><input class="form-input" id="ns-day" type="number" placeholder="28" min="1" max="31" /></div>
         <button class="btn-primary" onclick="addSale()">Registrar venda</button>
         <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
       </div>
     </div>`;
   }
+
   return '';
 }
