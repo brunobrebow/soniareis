@@ -74,7 +74,7 @@ body {
 }
 
 /* ─── TOP BAR ─── */
-.screen-fixed-header { position: sticky; top: 0; z-index: 5; background: #fff; }
+.screen-fixed-header { position: sticky; top: 0; z-index: 5; background: #fff; border-bottom: 1px solid #f0f0f0; }
 .topbar { padding: 20px 20px 12px; border-bottom: 1px solid #f0f0f0; }
 .topbar-row { display: flex; align-items: center; justify-content: space-between; }
 .topbar h2 { font-size: 24px; font-weight: 600; color: #1a1a1a; }

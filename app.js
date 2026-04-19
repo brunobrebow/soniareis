@@ -435,18 +435,21 @@ function renderCobrancas() {
   const filters = [{ id: 'hoje', label: 'Hoje' }, { id: 'atrasado', label: 'Atrasado' }, { id: 'mes', label: 'Este mês' }];
 
   return `
-    <div class="topbar">
-      <div class="topbar-row">
-        <div><h2>Cobranças</h2><p>${todayCount} vencem hoje · ${lateCount} em atraso</p></div>
-        <button class="add-btn" onclick="openModal('addSale')">+</button>
+    <div class="screen-fixed-header">
+      <div class="topbar">
+        <div class="topbar-row">
+          <div><h2>Cobranças</h2><p>${todayCount} vencem hoje · ${lateCount} em atraso</p></div>
+          <button class="add-btn" onclick="openModal('addSale')">+</button>
+        </div>
       </div>
+      <div class="filter-tabs">
+        ${filters.map(f => `<button class="filter-tab ${state.chargeFilter === f.id ? 'active' : ''}" onclick="setChargeFilter('${f.id}')">${f.label}</button>`).join('')}
+      </div>
+      <div style="height:12px"></div>
     </div>
-    <div class="filter-tabs">
-      ${filters.map(f => `<button class="filter-tab ${state.chargeFilter === f.id ? 'active' : ''}" onclick="setChargeFilter('${f.id}')">${f.label}</button>`).join('')}
-    </div>
-    <div style="height:12px"></div>
-    ${charges.length === 0 ? `<div class="empty-state">Nenhuma cobrança para este filtro 🎉</div>` : ''}
-    ${charges.map(({ sale, parcel, contact, isPast, isToday }) => {
+    <div class="screen-scroll-list">
+      ${charges.length === 0 ? `<div class="empty-state">Nenhuma cobrança para este filtro 🎉</div>` : ''}
+      ${charges.map(({ sale, parcel, contact, isPast, isToday }) => {
       if (!contact) return '';
       const ci = getColorIndex(contact.id);
       const msg = getWhatsappMsg(contact, parcel, sale);
@@ -472,7 +475,8 @@ function renderCobrancas() {
             <button class="btn-pago" onclick="openPaidModal('${sale.id}',${parcel.index})">Marcar pago</button>
           </div>
         </div>`;
-    }).join('')}`;
+    }).join('')}
+    </div>`;
 }
 
 function renderFinanceiro() {
@@ -488,31 +492,35 @@ function renderFinanceiro() {
   const upcoming = getDueCharges('mes').slice(0, 8);
 
   return `
-    <div class="topbar">
-      <div class="topbar-row">
-        <div><h2>Financeiro</h2><p>Visão geral</p></div>
+    <div class="screen-fixed-header">
+      <div class="topbar">
+        <div class="topbar-row">
+          <div><h2>Financeiro</h2><p>Visão geral</p></div>
+        </div>
       </div>
+      <div class="metric-grid">
+        <div class="metric-card"><div class="metric-label">Recebido</div><div class="metric-value" style="color:#3B6D11">R$ ${recebido.toLocaleString('pt-BR')}</div><div class="metric-sub">parcelas pagas</div></div>
+        <div class="metric-card"><div class="metric-label">A receber</div><div class="metric-value" style="color:#993556">R$ ${pendente.toLocaleString('pt-BR')}</div><div class="metric-sub">pendente</div></div>
+        <div class="metric-card"><div class="metric-label">Em atraso</div><div class="metric-value" style="color:#A32D2D">R$ ${atrasado.toLocaleString('pt-BR')}</div><div class="metric-sub">${getDueCharges('atrasado').length} cobranças</div></div>
+        <div class="metric-card"><div class="metric-label">Clientes</div><div class="metric-value">${state.contacts.length}</div><div class="metric-sub">cadastradas</div></div>
+      </div>
+      <div class="section-label" style="margin-top:8px">Próximas cobranças</div>
     </div>
-    <div class="metric-grid">
-      <div class="metric-card"><div class="metric-label">Recebido</div><div class="metric-value" style="color:#3B6D11">R$ ${recebido.toLocaleString('pt-BR')}</div><div class="metric-sub">parcelas pagas</div></div>
-      <div class="metric-card"><div class="metric-label">A receber</div><div class="metric-value" style="color:#993556">R$ ${pendente.toLocaleString('pt-BR')}</div><div class="metric-sub">pendente</div></div>
-      <div class="metric-card"><div class="metric-label">Em atraso</div><div class="metric-value" style="color:#A32D2D">R$ ${atrasado.toLocaleString('pt-BR')}</div><div class="metric-sub">${getDueCharges('atrasado').length} cobranças</div></div>
-      <div class="metric-card"><div class="metric-label">Clientes</div><div class="metric-value">${state.contacts.length}</div><div class="metric-sub">cadastradas</div></div>
-    </div>
-    <div class="section-label" style="margin-top:8px">Próximas cobranças</div>
-    <div class="upcoming-list">
-      ${upcoming.length === 0 ? `<div class="empty-state" style="padding:20px">Nenhuma cobrança próxima.</div>` : ''}
-      ${upcoming.map(({ sale, parcel, contact }) => {
-        if (!contact) return '';
-        return `
-          <div class="upcoming-item">
-            <div>
-              <div class="upcoming-name">${contact.name.split(' ').slice(0, 2).join(' ')}</div>
-              <div class="upcoming-date">${sale.description} · ${parcel.dateStr}</div>
-            </div>
-            <div class="upcoming-val">R$ ${parcel.amount}</div>
-          </div>`;
-      }).join('')}
+    <div class="screen-scroll-list">
+      <div class="upcoming-list">
+        ${upcoming.length === 0 ? `<div class="empty-state" style="padding:20px">Nenhuma cobrança próxima.</div>` : ''}
+        ${upcoming.map(({ sale, parcel, contact }) => {
+          if (!contact) return '';
+          return `
+            <div class="upcoming-item">
+              <div>
+                <div class="upcoming-name">${contact.name.split(' ').slice(0, 2).join(' ')}</div>
+                <div class="upcoming-date">${sale.description} · ${parcel.dateStr}</div>
+              </div>
+              <div class="upcoming-val">R$ ${parcel.amount}</div>
+            </div>`;
+        }).join('')}
+      </div>
     </div>`;
 }
 
