@@ -1,5 +1,35 @@
 // app.js — Sonia Reis CRM
 
+// ── SCROLL LOCK ──
+// Prevents iOS Safari from breaking overflow:hidden after keyboard/modal interactions
+(function() {
+  // Block ALL horizontal scroll at window level
+  window.addEventListener('scroll', function() {
+    if (window.scrollX !== 0) window.scrollTo(0, window.scrollY);
+  }, { passive: false });
+
+  // Block body-level scrolling — only .screen should scroll
+  document.addEventListener('touchmove', function(e) {
+    let target = e.target;
+    while (target && target !== document.body) {
+      const style = window.getComputedStyle(target);
+      if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && target.scrollHeight > target.clientHeight) {
+        return; // Allow scroll inside scrollable containers (.screen, .modal-sheet, .detail-overlay)
+      }
+      target = target.parentElement;
+    }
+    e.preventDefault();
+  }, { passive: false });
+})();
+
+function lockScroll() {
+  window.scrollTo(0, 0);
+  document.body.scrollLeft = 0;
+  document.body.scrollTop = 0;
+  document.documentElement.scrollLeft = 0;
+  document.documentElement.scrollTop = 0;
+}
+
 const COLORS = ['#F4C0D1','#B5D4F4','#9FE1CB','#FAC775','#F5C4B3','#C0DD97'];
 const TEXT_COLORS = ['#72243E','#0C447C','#085041','#633806','#993C1D','#3B6D11'];
 
@@ -182,6 +212,8 @@ async function addContact() {
     closeModal();
     showToast('Cliente cadastrada!');
     render();
+    setTimeout(lockScroll, 100);
+    setTimeout(lockScroll, 500);
   } catch (e) {
     showToast('Erro ao salvar. Tente novamente.', '#A32D2D');
     console.error(e);
@@ -211,6 +243,8 @@ async function addSale() {
     closeModal();
     showToast('Venda registrada!');
     render();
+    setTimeout(lockScroll, 100);
+    setTimeout(lockScroll, 500);
   } catch (e) {
     showToast('Erro ao salvar. Tente novamente.', '#A32D2D');
     console.error(e);
@@ -225,6 +259,8 @@ async function markPaid(saleId, parcelIndex) {
     state.paidModal = null;
     showToast('Parcela marcada como paga!');
     render();
+    setTimeout(lockScroll, 100);
+    setTimeout(lockScroll, 500);
   } catch (e) {
     showToast('Erro ao atualizar. Tente novamente.', '#A32D2D');
     console.error(e);
@@ -244,6 +280,8 @@ async function confirmDeleteContact() {
     state.detail = null;
     showToast('Cliente excluída.');
     render();
+    setTimeout(lockScroll, 100);
+    setTimeout(lockScroll, 500);
   } catch (e) {
     showToast('Erro ao excluir. Tente novamente.', '#A32D2D');
     console.error(e);
@@ -257,7 +295,7 @@ function updateSearch(v) { state.search = v; render(); }
 function openDetail(id) { state.detail = id; render(); }
 function closeDetail() { state.detail = null; render(); }
 function openModal(m, extra) { state.modal = m; state.modalExtra = extra || null; render(); }
-function closeModal() { state.modal = null; state.chargeModal = null; state.paidModal = null; state.deleteContactModal = null; render(); }
+function closeModal() { state.modal = null; state.chargeModal = null; state.paidModal = null; state.deleteContactModal = null; render(); setTimeout(lockScroll, 100); setTimeout(lockScroll, 300); }
 function setChargeFilter(f) { state.chargeFilter = f; render(); }
 function openPaidModal(saleId, parcelIndex) { state.paidModal = { saleId, parcelIndex }; render(); }
 function openDeleteContactModal(id) { state.deleteContactModal = id; render(); }
@@ -300,6 +338,7 @@ function render() {
   html += renderModal();
   screen.innerHTML = html;
   renderNav();
+  lockScroll();
 }
 
 function renderNav() {
