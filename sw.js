@@ -1,7 +1,7 @@
 // sw.js — service worker para PWA
-// Versão: mude o número para forçar atualização do cache
+// Estratégia: network-first (sempre busca versão nova, cache é fallback offline)
 
-const CACHE_NAME = 'sonia-reis-crm-v1';
+const CACHE_NAME = 'sonia-reis-crm-v2';
 const ASSETS = [
   '/',
   '/index.html',
@@ -9,6 +9,7 @@ const ASSETS = [
   '/config.js',
   '/db.js',
   '/app.js',
+  '/auth.js',
   '/manifest.json'
 ];
 
@@ -29,12 +30,16 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // Supabase sempre vai pela rede
   if (event.request.url.includes('supabase.co')) return;
 
+  // Network-first: tenta rede, se falhar usa cache
   event.respondWith(
-    caches.match(event.request).then(cached => {
-      return cached || fetch(event.request);
-    })
+    fetch(event.request)
+      .then(response => {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
