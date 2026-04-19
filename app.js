@@ -209,6 +209,7 @@ async function addContact() {
   try {
     const newContact = await DB.addContact({ name, local, phone: '55' + phone });
     state.contacts.push(newContact);
+    state.contacts.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
     closeModal();
     showToast('Cliente cadastrada!');
     render();
@@ -229,6 +230,7 @@ async function editContact(id) {
     const updated = await DB.updateContact(id, { name, local, phone: '55' + phone });
     const idx = state.contacts.findIndex(c => c.id === id);
     if (idx >= 0) state.contacts[idx] = updated;
+    state.contacts.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
     closeModal();
     showToast('Dados atualizados!');
     render();
