@@ -326,7 +326,6 @@ function openWpp(url) { window.open(url, '_blank'); closeModal(); }
 function render() {
   const screen = document.getElementById('screen');
   const nav = document.getElementById('bottomnav');
-  const sidebar = document.getElementById('sidebar');
   if (!screen) return;
 
   if (state.loading) {
@@ -335,7 +334,6 @@ function render() {
       <p style="color:#888;font-size:15px">Carregando...</p>
     </div>`;
     if (nav) nav.innerHTML = '';
-    if (sidebar) sidebar.innerHTML = '';
     return;
   }
 
@@ -345,7 +343,6 @@ function render() {
       <button onclick="init()" style="padding:10px 20px;background:#D4537E;color:white;border:none;border-radius:10px;font-size:14px;cursor:pointer">Tentar novamente</button>
     </div>`;
     if (nav) nav.innerHTML = '';
-    if (sidebar) sidebar.innerHTML = '';
     return;
   }
 
@@ -383,25 +380,6 @@ function renderNav() {
     }
   }
 
-  const sidebar = document.getElementById('sidebar');
-  if (sidebar) {
-    sidebar.innerHTML = `
-      <div class="sidebar-brand">
-        <div class="sidebar-logo">💎</div>
-        <div class="sidebar-title">Sonia Reis<span>CRM</span></div>
-      </div>
-      <nav class="sidebar-nav">
-        ${tabs.map(t => `
-          <div class="sidebar-item ${state.tab === t.id ? 'active' : ''}" onclick="switchTab('${t.id}')">
-            <span class="sidebar-icon">${t.icon}</span>
-            ${t.label}
-          </div>`).join('')}
-      </nav>
-      <div class="sidebar-footer">
-        <div class="sidebar-user">👤 soniareis</div>
-        <button class="sidebar-logout" onclick="AUTH.logout()">Sair</button>
-      </div>`;
-  }
 }
 
 // ---------- SCREENS ----------
