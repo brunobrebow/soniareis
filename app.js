@@ -43,6 +43,7 @@ let state = {
   modal: null,
   modalExtra: null,
   chargeFilter: 'mes',
+  financeDetail: null,
   chargeModal: null,
   paidModal: null,
   deleteContactModal: null,
@@ -312,7 +313,7 @@ async function confirmDeleteContact() {
 
 // ---------- NAVIGATION ----------
 
-function switchTab(tab) { state.tab = tab; state.detail = null; render(); }
+function switchTab(tab) { state.tab = tab; state.detail = null; state.financeDetail = null; render(); }
 function updateSearch(v) {
   state.search = v;
   render();
@@ -327,6 +328,7 @@ function closeDetail() { state.detail = null; render(); }
 function openModal(m, extra) { state.modal = m; state.modalExtra = extra || null; render(); }
 function closeModal() { state.modal = null; state.chargeModal = null; state.paidModal = null; state.deleteContactModal = null; render(); setTimeout(lockScroll, 100); setTimeout(lockScroll, 300); }
 function setChargeFilter(f) { state.chargeFilter = f; render(); }
+function toggleFinanceDetail(key) { state.financeDetail = state.financeDetail === key ? null : key; render(); }
 function openPaidModal(saleId, parcelIndex) { state.paidModal = { saleId, parcelIndex }; render(); }
 function openDeleteContactModal(id) { state.deleteContactModal = id; render(); }
 function openWpp(url) { window.open(url, '_blank'); closeModal(); }
@@ -549,6 +551,28 @@ function renderFinanceiro() {
   const atrasado = getDueCharges('atrasado').reduce((a, c) => a + c.parcel.amount, 0);
   const upcoming = getDueCharges('mes').slice(0, 8);
 
+  // Monthly projection for "A receber"
+  const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  let monthlyData = [];
+  if (state.financeDetail === 'a_receber') {
+    const monthMap = {};
+    state.sales.forEach(sale => {
+      const parcels = getSaleParcels(sale);
+      parcels.forEach(p => {
+        if (p.paid) return;
+        const key = `${p.date.getFullYear()}-${String(p.date.getMonth()).padStart(2, '0')}`;
+        const label = `${meses[p.date.getMonth()]} ${p.date.getFullYear()}`;
+        if (!monthMap[key]) monthMap[key] = { key, label, total: 0, count: 0 };
+        monthMap[key].total += p.amount;
+        monthMap[key].count++;
+      });
+    });
+    monthlyData = Object.values(monthMap).sort((a, b) => a.key.localeCompare(b.key));
+  }
+
+  const isActive = state.financeDetail === 'a_receber';
+  const sectionTitle = isActive ? 'Previsão por mês' : 'Próximas cobranças';
+
   return `
     <div class="screen-fixed-header">
       <div class="topbar">
@@ -558,27 +582,41 @@ function renderFinanceiro() {
       </div>
       <div class="metric-grid">
         <div class="metric-card"><div class="metric-label">Recebido</div><div class="metric-value" style="color:#3B6D11">R$ ${recebido.toLocaleString('pt-BR')}</div><div class="metric-sub">parcelas pagas</div></div>
-        <div class="metric-card"><div class="metric-label">A receber</div><div class="metric-value" style="color:#993556">R$ ${pendente.toLocaleString('pt-BR')}</div><div class="metric-sub">pendente</div></div>
+        <div class="metric-card ${isActive ? 'metric-card-active' : ''}" onclick="toggleFinanceDetail('a_receber')" style="cursor:pointer"><div class="metric-label">A receber ${isActive ? '✕' : '›'}</div><div class="metric-value" style="color:#993556">R$ ${pendente.toLocaleString('pt-BR')}</div><div class="metric-sub">toque para ver meses</div></div>
         <div class="metric-card"><div class="metric-label">Em atraso</div><div class="metric-value" style="color:#A32D2D">R$ ${atrasado.toLocaleString('pt-BR')}</div><div class="metric-sub">${getDueCharges('atrasado').length} cobranças</div></div>
         <div class="metric-card"><div class="metric-label">Clientes</div><div class="metric-value">${state.contacts.length}</div><div class="metric-sub">cadastradas</div></div>
       </div>
-      <div class="section-label" style="margin-top:8px">Próximas cobranças</div>
+      <div class="section-label" style="margin-top:8px">${sectionTitle}</div>
     </div>
     <div class="screen-scroll-list">
-      <div class="upcoming-list">
-        ${upcoming.length === 0 ? `<div class="empty-state" style="padding:20px">Nenhuma cobrança próxima.</div>` : ''}
-        ${upcoming.map(({ sale, parcel, contact }) => {
-          if (!contact) return '';
-          return `
+      ${isActive ? `
+        <div class="upcoming-list">
+          ${monthlyData.length === 0 ? '<div class="empty-state" style="padding:20px">Nenhuma parcela pendente.</div>' : ''}
+          ${monthlyData.map(m => `
             <div class="upcoming-item">
               <div>
-                <div class="upcoming-name">${contact.name.split(' ').slice(0, 2).join(' ')}</div>
-                <div class="upcoming-date">${sale.description} · ${parcel.dateStr}</div>
+                <div class="upcoming-name">${m.label}</div>
+                <div class="upcoming-date">${m.count} parcela${m.count > 1 ? 's' : ''}</div>
               </div>
-              <div class="upcoming-val">R$ ${parcel.amount}</div>
-            </div>`;
-        }).join('')}
-      </div>
+              <div class="upcoming-val">R$ ${m.total.toLocaleString('pt-BR')}</div>
+            </div>`).join('')}
+        </div>
+      ` : `
+        <div class="upcoming-list">
+          ${upcoming.length === 0 ? '<div class="empty-state" style="padding:20px">Nenhuma cobrança próxima.</div>' : ''}
+          ${upcoming.map(({ sale, parcel, contact }) => {
+            if (!contact) return '';
+            return `
+              <div class="upcoming-item">
+                <div>
+                  <div class="upcoming-name">${contact.name.split(' ').slice(0, 2).join(' ')}</div>
+                  <div class="upcoming-date">${sale.description} · ${parcel.dateStr}</div>
+                </div>
+                <div class="upcoming-val">R$ ${parcel.amount}</div>
+              </div>`;
+          }).join('')}
+        </div>
+      `}
     </div>`;
 }
 
