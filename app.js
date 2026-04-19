@@ -311,11 +311,17 @@ function renderNav() {
 
   const nav = document.getElementById('bottomnav');
   if (nav) {
-    nav.innerHTML = tabs.map(t => `
+    const anyOverlay = state.modal || state.detail || state.chargeModal || state.paidModal || state.deleteContactModal;
+    if (anyOverlay) {
+      nav.style.display = 'none';
+    } else {
+      nav.style.display = 'flex';
+      nav.innerHTML = tabs.map(t => `
       <div class="nav-item ${state.tab === t.id ? 'active' : ''}" onclick="switchTab('${t.id}')">
         <span class="nav-icon">${t.icon}</span>
         <span class="nav-label">${t.label}</span>
       </div>`).join('');
+    }
   }
 
   const sidebar = document.getElementById('sidebar');
