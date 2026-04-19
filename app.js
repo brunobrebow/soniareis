@@ -313,7 +313,15 @@ async function confirmDeleteContact() {
 // ---------- NAVIGATION ----------
 
 function switchTab(tab) { state.tab = tab; state.detail = null; render(); }
-function updateSearch(v) { state.search = v; render(); }
+function updateSearch(v) {
+  state.search = v;
+  render();
+  const input = document.querySelector('.search-box input');
+  if (input) {
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+}
 function openDetail(id) { state.detail = id; render(); }
 function closeDetail() { state.detail = null; render(); }
 function openModal(m, extra) { state.modal = m; state.modalExtra = extra || null; render(); }
