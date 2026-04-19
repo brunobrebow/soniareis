@@ -50,16 +50,18 @@ body {
 #app {
   width: 100%;
   max-width: 430px;
-  min-height: 100dvh;
+  height: 100dvh;
   background: #ffffff;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 #sidebar { display: none; }
 
 .screen {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding-bottom: 0;
   -webkit-overflow-scrolling: touch;
