@@ -220,6 +220,26 @@ async function addContact() {
   }
 }
 
+async function editContact(id) {
+  const name = document.getElementById('ec-name').value.trim();
+  const local = document.getElementById('ec-local').value.trim();
+  const phone = document.getElementById('ec-phone').value.replace(/\D/g, '');
+  if (!name || !local || !phone) { showToast('Preencha todos os campos', '#A32D2D'); return; }
+  try {
+    const updated = await DB.updateContact(id, { name, local, phone: '55' + phone });
+    const idx = state.contacts.findIndex(c => c.id === id);
+    if (idx >= 0) state.contacts[idx] = updated;
+    closeModal();
+    showToast('Dados atualizados!');
+    render();
+    setTimeout(lockScroll, 100);
+    setTimeout(lockScroll, 500);
+  } catch (e) {
+    showToast('Erro ao atualizar. Tente novamente.', '#A32D2D');
+    console.error(e);
+  }
+}
+
 async function addSale() {
   const desc = document.getElementById('ns-desc').value.trim();
   const total = parseFloat(document.getElementById('ns-total').value) || 0;
@@ -538,6 +558,7 @@ function renderDetail(contactId) {
         <div class="info-row"><span class="info-label">WhatsApp</span><span class="info-value" style="color:#25D366">+${c.phone}</span></div>
         <div class="info-row"><span class="info-label">Local</span><span class="info-value">${c.local || '—'}</span></div>
         <div class="info-row"><span class="info-label">A receber</span><span class="info-value" style="color:${totalPending > 0 ? '#993556' : '#3B6D11'}">R$ ${totalPending.toLocaleString('pt-BR')}</span></div>
+        <button onclick="openModal('editContact','${c.id}')" style="width:100%;padding:10px;background:none;border:1px solid #e0e0e0;border-radius:10px;color:#666;font-size:14px;cursor:pointer;margin-top:12px">✏️ Editar dados</button>
       </div>
       <div class="detail-section">
         <h3>Vendas e parcelas</h3>
@@ -622,6 +643,22 @@ function renderModal() {
         <div class="form-group"><label class="form-label">Local</label><input class="form-input" id="nc-local" placeholder="Ex: Posto de Saúde 1" /></div>
         <div class="form-group"><label class="form-label">WhatsApp (com DDD)</label><input class="form-input" id="nc-phone" type="tel" placeholder="43 99999-0000" /></div>
         <button class="btn-primary" onclick="addContact()">Cadastrar cliente</button>
+        <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+      </div>
+    </div>`;
+  }
+
+  if (state.modal === 'editContact') {
+    const c = getContact(state.modalExtra);
+    if (!c) return '';
+    const phoneDisplay = c.phone.startsWith('55') ? c.phone.slice(2) : c.phone;
+    return `<div class="modal-overlay" onclick="closeModal()">
+      <div class="modal-sheet" onclick="event.stopPropagation()">
+        <div class="modal-title">Editar cliente</div>
+        <div class="form-group"><label class="form-label">Nome completo</label><input class="form-input" id="ec-name" value="${c.name}" /></div>
+        <div class="form-group"><label class="form-label">Local</label><input class="form-input" id="ec-local" value="${c.local || ''}" /></div>
+        <div class="form-group"><label class="form-label">WhatsApp (com DDD)</label><input class="form-input" id="ec-phone" type="tel" value="${phoneDisplay}" /></div>
+        <button class="btn-primary" onclick="editContact('${c.id}')">Salvar alterações</button>
         <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
       </div>
     </div>`;
