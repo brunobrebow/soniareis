@@ -396,32 +396,36 @@ function renderContatos() {
   });
 
   return `
-    <div class="topbar">
-      <div class="topbar-row">
-        <div><h2>Contatos</h2><p>${state.contacts.length} clientes cadastradas</p></div>
-        <button class="add-btn" onclick="openModal('addContact')">+</button>
+    <div class="screen-fixed-header">
+      <div class="topbar">
+        <div class="topbar-row">
+          <div><h2>Contatos</h2><p>${state.contacts.length} clientes cadastradas</p></div>
+          <button class="add-btn" onclick="openModal('addContact')">+</button>
+        </div>
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" placeholder="Buscar por nome ou local..." value="${state.search}" oninput="updateSearch(this.value)">
+        </div>
       </div>
-      <div class="search-box">
-        <span class="search-icon">🔍</span>
-        <input type="text" placeholder="Buscar por nome ou local..." value="${state.search}" oninput="updateSearch(this.value)">
-      </div>
+      <div class="section-label">Todas as clientes</div>
     </div>
-    <div class="section-label">Todas as clientes</div>
-    ${filtered.length === 0 ? `<div class="empty-state">Nenhuma cliente encontrada.<br>Toque em + para adicionar.</div>` : ''}
-    ${filtered.map(c => {
-      const ci = getColorIndex(c.id);
-      const pending = pendingByContact[c.id] || 0;
-      return `
-        <div class="contact-item" onclick="openDetail('${c.id}')">
-          <div class="avatar" style="background:${COLORS[ci]};color:${TEXT_COLORS[ci]}">${getInitials(c.name)}</div>
-          <div class="contact-info">
-            <div class="contact-name">${c.name}</div>
-            <div class="contact-sub">${c.local || ''}</div>
-          </div>
-          ${pending ? `<span class="badge badge-due">${pending} pend.</span>` : '<span class="badge badge-ok">Em dia</span>'}
-          <span class="chevron">›</span>
-        </div>`;
-    }).join('')}`;
+    <div class="screen-scroll-list">
+      ${filtered.length === 0 ? `<div class="empty-state">Nenhuma cliente encontrada.<br>Toque em + para adicionar.</div>` : ''}
+      ${filtered.map(c => {
+        const ci = getColorIndex(c.id);
+        const pending = pendingByContact[c.id] || 0;
+        return `
+          <div class="contact-item" onclick="openDetail('${c.id}')">
+            <div class="avatar" style="background:${COLORS[ci]};color:${TEXT_COLORS[ci]}">${getInitials(c.name)}</div>
+            <div class="contact-info">
+              <div class="contact-name">${c.name}</div>
+              <div class="contact-sub">${c.local || ''}</div>
+            </div>
+            ${pending ? `<span class="badge badge-due">${pending} pend.</span>` : '<span class="badge badge-ok">Em dia</span>'}
+            <span class="chevron">›</span>
+          </div>`;
+      }).join('')}
+    </div>`;
 }
 
 function renderCobrancas() {
