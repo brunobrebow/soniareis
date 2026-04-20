@@ -68,7 +68,7 @@ body {
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  padding-bottom: 84px;
+  padding-bottom: 90px;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
 }
@@ -106,7 +106,7 @@ body {
 .badge-late { background: #FCEBEB; color: #A32D2D; }
 
 /* ─── BOTTOM NAV ─── */
-.bottomnav { position: fixed; bottom: 0; left: 0; right: 0; max-width: 430px; margin: 0 auto; height: 74px; background: #ffffff; border-top: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-around; padding: 0 8px; padding-bottom: env(safe-area-inset-bottom, 0px); z-index: 200; }
+.bottomnav { position: fixed; bottom: 0; left: 0; right: 0; max-width: 430px; margin: 0 auto; background: #ffffff; border-top: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-around; padding: 10px 8px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); z-index: 200; }
 .nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; padding: 8px 20px; border-radius: 12px; flex: 1; }
 .nav-item.active { background: #FBEAF0; }
 .nav-icon { font-size: 22px; }
