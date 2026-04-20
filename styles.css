@@ -120,6 +120,7 @@ body {
 .day-header-line { height: 1px; background: #e8e8e8; margin-top: 8px; }
 .day-header-line-late { background: #f0c0c0; }
 .charge-item { margin: 0 16px 12px; background: #fff; border: 1px solid #f0f0f0; border-radius: 14px; padding: 14px 16px; }
+.charge-item-late { background: #FEF2F2; border-color: #f0d0d0; }
 .charge-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .charge-name { font-size: 16px; font-weight: 500; color: #1a1a1a; flex: 1; }
 .charge-body { display: flex; align-items: center; justify-content: space-between; }

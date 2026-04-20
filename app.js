@@ -514,7 +514,7 @@ function renderCobrancas() {
           const msg = getWhatsappMsg(contact, parcel, sale);
           const wppUrl = `https://wa.me/${contact.phone}?text=${encodeURIComponent(msg)}`;
           return `
-            <div class="charge-item">
+            <div class="charge-item ${isPast ? 'charge-item-late' : ''}">
               <div class="charge-header">
                 <div class="avatar" style="width:38px;height:38px;font-size:13px;background:${COLORS[ci]};color:${TEXT_COLORS[ci]}">${getInitials(contact.name)}</div>
                 <span class="charge-name">${contact.name.split(' ').slice(0, 2).join(' ')}</span>
