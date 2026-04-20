@@ -443,25 +443,22 @@ function renderContatos() {
 function renderCobrancas() {
   const allCharges = getDueCharges('mes');
   const lateCharges = allCharges.filter(c => c.isPast);
-  const upcomingCharges = allCharges.filter(c => !c.isPast);
   const lateCount = lateCharges.length;
   const todayCount = allCharges.filter(c => c.isToday).length;
 
   const filters = [{ id: 'mes', label: 'Este mês' }, { id: 'atrasado', label: 'Atrasado' }, { id: 'hoje', label: 'Hoje' }];
 
-  // Determine which charges to show based on filter
   let charges;
   if (state.chargeFilter === 'atrasado') charges = lateCharges;
   else if (state.chargeFilter === 'hoje') charges = allCharges.filter(c => c.isToday);
   else charges = allCharges;
 
   // Group by day
-  const diasSemana = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+  const diasSemana = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
   const groups = [];
   let currentKey = null;
   let currentGroup = null;
 
-  // For "mes" filter: show atrasados first, then by day
   const sorted = [...charges].sort((a, b) => {
     if (a.isPast && !b.isPast) return -1;
     if (!a.isPast && b.isPast) return 1;
@@ -469,24 +466,24 @@ function renderCobrancas() {
   });
 
   sorted.forEach(charge => {
-    let key, label;
+    let key, label, isPastGroup;
     if (charge.isPast) {
-      key = 'atrasado';
-      label = '⚠️ Atrasado';
+      const d = charge.parcel.date;
+      key = `late-${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      const diaSemana = diasSemana[d.getDay()];
+      label = `${diaSemana}, ${d.getDate()} — Atrasado`;
+      isPastGroup = true;
     } else {
       const d = charge.parcel.date;
       key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
       const diaSemana = diasSemana[d.getDay()];
       const diaNum = d.getDate();
-      if (charge.isToday) {
-        label = `Hoje, ${diaNum}`;
-      } else {
-        label = `${diaSemana} ${diaNum}`;
-      }
+      label = charge.isToday ? `Hoje, ${diaSemana.toLowerCase()}, ${diaNum}` : `${diaSemana}, ${diaNum}`;
+      isPastGroup = false;
     }
     if (key !== currentKey) {
       currentKey = key;
-      currentGroup = { label, isPast: charge.isPast, items: [] };
+      currentGroup = { label, isPast: isPastGroup, items: [] };
       groups.push(currentGroup);
     }
     currentGroup.items.push(charge);
@@ -507,7 +504,10 @@ function renderCobrancas() {
     <div class="screen-scroll-list">
       ${charges.length === 0 ? `<div class="empty-state">Nenhuma cobrança para este filtro 🎉</div>` : ''}
       ${groups.map(group => `
-        <div class="section-label" style="padding-top:14px;${group.isPast ? 'color:#A32D2D' : ''}">${group.label}</div>
+        <div class="day-header">
+          <span class="day-header-text ${group.isPast ? 'day-header-late' : ''}">${group.label}</span>
+          <div class="day-header-line ${group.isPast ? 'day-header-line-late' : ''}"></div>
+        </div>
         ${group.items.map(({ sale, parcel, contact, isPast, isToday }) => {
           if (!contact) return '';
           const ci = getColorIndex(contact.id);
@@ -518,7 +518,7 @@ function renderCobrancas() {
               <div class="charge-header">
                 <div class="avatar" style="width:38px;height:38px;font-size:13px;background:${COLORS[ci]};color:${TEXT_COLORS[ci]}">${getInitials(contact.name)}</div>
                 <span class="charge-name">${contact.name.split(' ').slice(0, 2).join(' ')}</span>
-                <span class="badge ${isPast ? 'badge-late' : isToday ? 'badge-due' : 'badge-ok'}">${isPast ? 'Atrasado' : isToday ? 'Hoje' : 'Dia ' + parcel.date.getDate()}</span>
+                ${isPast ? '<span class="badge badge-late">Atrasado</span>' : ''}
               </div>
               <div class="charge-body">
                 <div>

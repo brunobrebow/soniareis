@@ -114,6 +114,11 @@ body {
 .nav-item.active .nav-label { color: #993556; font-weight: 600; }
 
 /* ─── CHARGE CARDS ─── */
+.day-header { padding: 18px 16px 8px; }
+.day-header-text { font-size: 13px; font-weight: 600; color: #555; letter-spacing: 0.02em; }
+.day-header-late { color: #A32D2D; }
+.day-header-line { height: 1px; background: #e8e8e8; margin-top: 8px; }
+.day-header-line-late { background: #f0c0c0; }
 .charge-item { margin: 0 16px 12px; background: #fff; border: 1px solid #f0f0f0; border-radius: 14px; padding: 14px 16px; }
 .charge-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .charge-name { font-size: 16px; font-weight: 500; color: #1a1a1a; flex: 1; }
