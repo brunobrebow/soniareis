@@ -155,6 +155,10 @@ body {
 .upcoming-val { font-size: 16px; font-weight: 600; color: #1a1a1a; }
 
 /* ─── DETAIL VIEW ─── */
+.client-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.client-stat { background: #f9f9f9; border-radius: 12px; padding: 12px; text-align: center; }
+.client-stat-value { font-size: 16px; font-weight: 600; color: #1a1a1a; }
+.client-stat-label { font-size: 11px; color: #aaa; margin-top: 3px; }
 .detail-overlay { position: fixed; top: 0; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 430px; background: #fff; z-index: 10; display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .detail-header { padding: 20px 16px 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #f0f0f0; position: sticky; top: 0; background: #fff; z-index: 1; }
 .back-btn { width: 38px; height: 38px; border-radius: 50%; border: 1px solid #e8e8e8; background: none; cursor: pointer; font-size: 20px; color: #1a1a1a; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }

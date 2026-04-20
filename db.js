@@ -106,10 +106,13 @@ const DB = {
     return data;
   },
 
-  async markPaid(saleId, parcelIndex) {
+  async markPaid(saleId, parcelIndex, amount, isFullPayment) {
+    const updates = isFullPayment
+      ? { paid: true, paid_at: new Date().toISOString(), paid_amount: amount }
+      : { paid: false, paid_at: new Date().toISOString(), paid_amount: amount };
     const { data, error } = await getClient()
       .from('payments')
-      .update({ paid: true, paid_at: new Date().toISOString() })
+      .update(updates)
       .eq('sale_id', saleId)
       .eq('parcel_index', parcelIndex)
       .select()

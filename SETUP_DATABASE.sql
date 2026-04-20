@@ -1,4 +1,4 @@
--- JOIAS APP — Setup do banco de dados Supabase
+-- SONIA REIS CRM — Setup do banco de dados Supabase
 -- Cole este SQL no Supabase > SQL Editor > New Query > Run
 
 create table if not exists contacts (
@@ -27,6 +27,7 @@ create table if not exists payments (
   parcel_index int,
   paid boolean default false,
   paid_at timestamptz,
+  paid_amount numeric default 0,
   created_at timestamptz default now()
 );
 

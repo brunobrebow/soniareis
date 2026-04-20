@@ -143,18 +143,26 @@ function getSaleParcels(sale) {
   const today = new Date();
   const m = today.getMonth();
   const y = today.getFullYear();
-  const paidIndexes = state.payments
-    .filter(p => p.sale_id === sale.id && p.paid)
-    .map(p => p.parcel_index);
+  const paymentsByIndex = {};
+  state.payments
+    .filter(p => p.sale_id === sale.id)
+    .forEach(p => { paymentsByIndex[p.parcel_index] = p; });
+
+  const paidCount = Object.values(paymentsByIndex).filter(p => p.paid).length;
 
   return Array.from({ length: sale.parcels }, (_, i) => {
-    const d = new Date(y, m - paidIndexes.length + i, sale.start_day);
+    const d = new Date(y, m - paidCount + i, sale.start_day);
+    const payment = paymentsByIndex[i];
+    const paidAmount = payment?.paid_amount || 0;
+    const remaining = sale.parcel_value - paidAmount;
     return {
       index: i,
       date: d,
       dateStr: d.toLocaleDateString('pt-BR'),
-      paid: paidIndexes.includes(i),
-      amount: sale.parcel_value
+      paid: payment?.paid || false,
+      amount: sale.parcel_value,
+      paidAmount,
+      remaining
     };
   });
 }
@@ -275,12 +283,47 @@ async function addSale() {
 }
 
 async function markPaid(saleId, parcelIndex) {
+  const sale = state.sales.find(s => s.id === saleId);
+  const payment = state.payments.find(p => p.sale_id === saleId && p.parcel_index === parcelIndex);
+  if (!sale || !payment) return;
+  const remaining = sale.parcel_value - (payment.paid_amount || 0);
   try {
-    await DB.markPaid(saleId, parcelIndex);
-    const p = state.payments.find(p => p.sale_id === saleId && p.parcel_index === parcelIndex);
-    if (p) { p.paid = true; p.paid_at = new Date().toISOString(); }
+    const totalPaid = (payment.paid_amount || 0) + remaining;
+    await DB.markPaid(saleId, parcelIndex, totalPaid, true);
+    payment.paid = true;
+    payment.paid_at = new Date().toISOString();
+    payment.paid_amount = totalPaid;
     state.paidModal = null;
-    showToast('Parcela marcada como paga!');
+    showToast('Pagamento registrado!');
+    render();
+    setTimeout(lockScroll, 100);
+    setTimeout(lockScroll, 500);
+  } catch (e) {
+    showToast('Erro ao atualizar. Tente novamente.', '#A32D2D');
+    console.error(e);
+  }
+}
+
+async function markPartialPaid(saleId, parcelIndex) {
+  const inputEl = document.getElementById('partial-amount');
+  const val = parseFloat(inputEl?.value) || 0;
+  if (val <= 0) { showToast('Insira um valor válido', '#A32D2D'); return; }
+  const sale = state.sales.find(s => s.id === saleId);
+  const payment = state.payments.find(p => p.sale_id === saleId && p.parcel_index === parcelIndex);
+  if (!sale || !payment) return;
+  const remaining = sale.parcel_value - (payment.paid_amount || 0);
+  const amount = Math.min(val, remaining);
+  const totalPaid = (payment.paid_amount || 0) + amount;
+  const isFullPayment = totalPaid >= sale.parcel_value;
+  try {
+    await DB.markPaid(saleId, parcelIndex, totalPaid, isFullPayment);
+    payment.paid_amount = totalPaid;
+    if (isFullPayment) {
+      payment.paid = true;
+    }
+    payment.paid_at = new Date().toISOString();
+    state.paidModal = null;
+    showToast(`R$ ${amount.toLocaleString('pt-BR')} registrado!`);
     render();
     setTimeout(lockScroll, 100);
     setTimeout(lockScroll, 500);
@@ -490,7 +533,7 @@ function renderCobrancas() {
   });
 
   // Stats for current filter
-  const totalValue = charges.reduce((a, c) => a + c.parcel.amount, 0);
+  const totalValue = charges.reduce((a, c) => a + c.parcel.remaining, 0);
   const lateInView = charges.filter(c => c.isPast).length;
   const todayInView = charges.filter(c => c.isToday).length;
 
@@ -536,13 +579,14 @@ function renderCobrancas() {
                   <div class="charge-detail">${sale.description}</div>
                   <div class="charge-detail" style="margin-top:2px">Parc. ${parcel.index + 1}/${sale.parcels}</div>
                 </div>
-                <div class="charge-amount">R$ ${parcel.amount}</div>
+                <div class="charge-amount">R$ ${parcel.remaining}${parcel.paidAmount > 0 ? `<div style="font-size:11px;color:#3B6D11;font-weight:400;margin-top:2px">pago: R$ ${parcel.paidAmount}</div>` : ''}</div>
               </div>
               <div class="charge-actions">
                 <button class="btn-cobrar" onclick="openWpp('${wppUrl}')">
-                  <span style="font-size:16px">💬</span> Cobrar
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.49a.75.75 0 00.914.914l4.456-1.495A11.952 11.952 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.34 0-4.508-.758-6.26-2.04l-.438-.33-3.222 1.08 1.08-3.222-.33-.438A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
+                  Cobrar
                 </button>
-                <button class="btn-pago" onclick="openPaidModal('${sale.id}',${parcel.index})">Marcar pago</button>
+                <button class="btn-pago" onclick="openPaidModal('${sale.id}',${parcel.index})">Registrar pgto</button>
               </div>
             </div>`;
         }).join('')}
@@ -559,7 +603,7 @@ function renderFinanceiro() {
     const sale = state.sales.find(s => s.id === p.sale_id);
     return acc + (sale ? sale.parcel_value : 0);
   }, 0);
-  const atrasado = getDueCharges('atrasado').reduce((a, c) => a + c.parcel.amount, 0);
+  const atrasado = getDueCharges('atrasado').reduce((a, c) => a + c.parcel.remaining, 0);
   const upcoming = getDueCharges('mes').slice(0, 8);
 
   // Monthly projection for "A receber"
@@ -623,7 +667,7 @@ function renderFinanceiro() {
                   <div class="upcoming-name">${contact.name.split(' ').slice(0, 2).join(' ')}</div>
                   <div class="upcoming-date">${sale.description} · ${parcel.dateStr}</div>
                 </div>
-                <div class="upcoming-val">R$ ${parcel.amount}</div>
+                <div class="upcoming-val">R$ ${parcel.remaining}</div>
               </div>`;
           }).join('')}
         </div>
@@ -640,6 +684,40 @@ function renderDetail(contactId) {
     return a + getSaleParcels(s).filter(p => !p.paid).reduce((x, p) => x + p.amount, 0);
   }, 0);
 
+  // ── Client stats ──
+  const totalSpent = cSales.reduce((a, s) => a + s.total, 0);
+  const totalPaid = state.payments.filter(p => {
+    const sale = cSales.find(s => s.id === p.sale_id);
+    return sale && p.paid;
+  }).reduce((a, p) => {
+    const sale = cSales.find(s => s.id === p.sale_id);
+    return a + (p.paid_amount || sale?.parcel_value || 0);
+  }, 0);
+  const pendingParcels = state.payments.filter(p => {
+    return cSales.some(s => s.id === p.sale_id) && !p.paid;
+  }).length;
+  const clientSince = c.created_at ? new Date(c.created_at) : null;
+  const now = new Date();
+  let tempoCliente = '';
+  if (clientSince) {
+    const diffMs = now - clientSince;
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffDays < 30) tempoCliente = `${diffDays} dia${diffDays !== 1 ? 's' : ''}`;
+    else {
+      const diffMonths = Math.floor(diffDays / 30);
+      tempoCliente = `${diffMonths} ${diffMonths === 1 ? 'mês' : 'meses'}`;
+    }
+  }
+  const firstSaleDate = cSales.length > 0 ? cSales.reduce((min, s) => {
+    const d = new Date(s.created_at);
+    return d < min ? d : min;
+  }, new Date()) : null;
+  let mediaMensal = 0;
+  if (firstSaleDate && cSales.length > 0) {
+    const months = Math.max(1, Math.ceil((now - firstSaleDate) / (30 * 86400000)));
+    mediaMensal = Math.round(totalSpent / months);
+  }
+
   return `
     <div class="detail-overlay">
       <div class="detail-header">
@@ -654,8 +732,20 @@ function renderDetail(contactId) {
         <h3>Informações</h3>
         <div class="info-row"><span class="info-label">WhatsApp</span><span class="info-value" style="color:#25D366">+${c.phone}</span></div>
         <div class="info-row"><span class="info-label">Local</span><span class="info-value">${c.local || '—'}</span></div>
+        <div class="info-row"><span class="info-label">Cliente desde</span><span class="info-value">${clientSince ? clientSince.toLocaleDateString('pt-BR') : '—'}</span></div>
         <div class="info-row"><span class="info-label">A receber</span><span class="info-value" style="color:${totalPending > 0 ? '#993556' : '#3B6D11'}">R$ ${totalPending.toLocaleString('pt-BR')}</span></div>
         <button onclick="openModal('editContact','${c.id}')" style="width:100%;padding:10px;background:none;border:1px solid #e0e0e0;border-radius:10px;color:#666;font-size:14px;cursor:pointer;margin-top:12px">✏️ Editar dados</button>
+      </div>
+      <div class="detail-section">
+        <h3>Resumo da cliente</h3>
+        <div class="client-stats">
+          <div class="client-stat"><div class="client-stat-value">R$ ${totalSpent.toLocaleString('pt-BR')}</div><div class="client-stat-label">total comprado</div></div>
+          <div class="client-stat"><div class="client-stat-value">R$ ${totalPaid.toLocaleString('pt-BR')}</div><div class="client-stat-label">total pago</div></div>
+          <div class="client-stat"><div class="client-stat-value">R$ ${mediaMensal.toLocaleString('pt-BR')}</div><div class="client-stat-label">média/mês</div></div>
+          <div class="client-stat"><div class="client-stat-value">${pendingParcels}</div><div class="client-stat-label">parcelas pendentes</div></div>
+          <div class="client-stat"><div class="client-stat-value">${cSales.length}</div><div class="client-stat-label">vendas</div></div>
+          <div class="client-stat"><div class="client-stat-value">${tempoCliente || '—'}</div><div class="client-stat-label">como cliente</div></div>
+        </div>
       </div>
       <div class="detail-section">
         <h3>Vendas e parcelas</h3>
@@ -673,7 +763,7 @@ function renderDetail(contactId) {
                     <span class="parcel-date">${p.dateStr}</span>
                     <div class="parcel-status">
                       <span class="badge ${p.paid ? 'badge-ok' : 'badge-due'}">${p.paid ? 'Pago' : 'Pendente'}</span>
-                      ${!p.paid ? `<button style="background:none;border:none;cursor:pointer;font-size:12px;color:#D4537E;padding:0" onclick="openPaidModal('${s.id}',${p.index})">✓ pago</button>` : ''}
+                      ${!p.paid ? `<button style="background:none;border:none;cursor:pointer;font-size:12px;color:#D4537E;padding:0" onclick="openPaidModal('${s.id}',${p.index})">Registrar</button>` : ''}
                     </div>
                   </div>`).join('')}
               </div>
@@ -706,11 +796,19 @@ function renderModal() {
   if (state.paidModal) {
     const { saleId, parcelIndex } = state.paidModal;
     const sale = state.sales.find(s => s.id === saleId);
+    const payment = state.payments.find(p => p.sale_id === saleId && p.parcel_index === parcelIndex);
+    const paidSoFar = payment?.paid_amount || 0;
+    const remaining = (sale?.parcel_value || 0) - paidSoFar;
     return `<div class="modal-overlay" onclick="closeModal()">
       <div class="modal-sheet" onclick="event.stopPropagation()">
-        <div class="modal-title">Confirmar pagamento</div>
-        <div class="modal-subtitle">Marcar parcela ${parcelIndex + 1} como paga? (R$ ${sale?.parcel_value})</div>
-        <button class="btn-primary" onclick="markPaid('${saleId}',${parcelIndex})">Confirmar pagamento</button>
+        <div class="modal-title">Registrar pagamento</div>
+        <div class="modal-subtitle">Parcela ${parcelIndex + 1}/${sale?.parcels} · R$ ${sale?.parcel_value}${paidSoFar > 0 ? `<br><span style="color:#3B6D11">Já pago: R$ ${paidSoFar.toLocaleString('pt-BR')}</span> · <span style="color:#993556">Restante: R$ ${remaining.toLocaleString('pt-BR')}</span>` : ''}</div>
+        <button class="btn-primary" onclick="markPaid('${saleId}',${parcelIndex})">Pagar valor total — R$ ${remaining.toLocaleString('pt-BR')}</button>
+        <div style="display:flex;align-items:center;gap:8px;margin:14px 0 6px"><div style="flex:1;height:1px;background:#e8e8e8"></div><span style="font-size:12px;color:#aaa">ou valor parcial</span><div style="flex:1;height:1px;background:#e8e8e8"></div></div>
+        <div style="display:flex;gap:8px">
+          <input class="form-input" id="partial-amount" type="number" placeholder="Ex: 80" style="flex:1" inputmode="decimal" />
+          <button class="btn-primary" style="width:auto;padding:13px 20px;margin-top:0" onclick="markPartialPaid('${saleId}',${parcelIndex})">Pagar</button>
+        </div>
         <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
       </div>
     </div>`;
