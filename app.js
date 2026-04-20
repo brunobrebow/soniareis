@@ -489,16 +489,27 @@ function renderCobrancas() {
     currentGroup.items.push(charge);
   });
 
+  // Stats for current filter
+  const totalValue = charges.reduce((a, c) => a + c.parcel.amount, 0);
+  const lateInView = charges.filter(c => c.isPast).length;
+  const todayInView = charges.filter(c => c.isToday).length;
+
   return `
     <div class="screen-fixed-header">
       <div class="topbar">
         <div class="topbar-row">
-          <div><h2>Cobranças</h2><p>${todayCount} vencem hoje · ${lateCount} em atraso</p></div>
+          <div><h2>Cobranças</h2></div>
           <button class="add-btn" onclick="openModal('addSale')">+</button>
         </div>
       </div>
       <div class="filter-tabs">
         ${filters.map(f => `<button class="filter-tab ${state.chargeFilter === f.id ? 'active' : ''}" onclick="setChargeFilter('${f.id}')">${f.label}</button>`).join('')}
+      </div>
+      <div class="charge-summary">
+        <div class="charge-summary-item"><span class="charge-summary-num">${charges.length}</span><span class="charge-summary-label">cobranças</span></div>
+        <div class="charge-summary-item"><span class="charge-summary-num" style="color:#D4537E">${todayInView}</span><span class="charge-summary-label">hoje</span></div>
+        <div class="charge-summary-item"><span class="charge-summary-num" style="color:#A32D2D">${lateInView}</span><span class="charge-summary-label">atrasadas</span></div>
+        <div class="charge-summary-item"><span class="charge-summary-num" style="color:#993556">R$ ${totalValue.toLocaleString('pt-BR')}</span><span class="charge-summary-label">a receber</span></div>
       </div>
     </div>
     <div class="screen-scroll-list">
