@@ -762,14 +762,20 @@ function renderHome() {
     return d.getMonth() === mesAtual && d.getFullYear() === anoAtual;
   }).reduce((a, s) => a + s.total, 0);
 
-  const totalRecebido = state.payments.filter(p => p.paid).reduce((a, p) => {
+  // Monthly received (paid this month)
+  const recebidoMes = state.payments.filter(p => {
+    if (!p.paid || !p.paid_at) return false;
+    const d = new Date(p.paid_at);
+    return d.getMonth() === mesAtual && d.getFullYear() === anoAtual;
+  }).reduce((a, p) => {
     const sale = state.sales.find(s => s.id === p.sale_id);
     return a + (p.paid_amount || sale?.parcel_value || 0);
   }, 0);
-  const totalPendente = state.payments.filter(p => !p.paid).reduce((a, p) => {
-    const sale = state.sales.find(s => s.id === p.sale_id);
-    return a + (sale ? sale.parcel_value - (p.paid_amount || 0) : 0);
-  }, 0);
+
+  // Monthly pending (unpaid parcels due this month)
+  const mesCharges = getDueCharges('mes');
+  const pendentesMes = mesCharges.filter(c => !c.isPast).reduce((a, c) => a + c.parcel.amount, 0);
+
   const lateCharges = getDueCharges('atrasado');
   const todayCharges = getDueCharges('hoje');
   const atrasadoTotal = lateCharges.reduce((a, c) => a + c.parcel.amount, 0);
@@ -787,10 +793,12 @@ function renderHome() {
         <div class="home-date">${diaSemana}, ${diaNum} de ${mes}</div>
       </div>
 
+      <div class="home-section-title">Resumo mensal</div>
+
       <div class="home-card home-card-main">
         <div class="home-card-row">
           <div>
-            <div class="home-card-label">Vendas este mês</div>
+            <div class="home-card-label">Meta mensal</div>
             <div class="home-card-big" style="color:#1a1a1a">R$ ${vendasMes.toLocaleString('pt-BR')}</div>
           </div>
           <div style="text-align:right">
@@ -809,11 +817,11 @@ function renderHome() {
 
       <div class="home-stats-row">
         <div class="home-stat-box">
-          <div class="home-stat-num" style="color:#3B6D11">R$ ${totalRecebido.toLocaleString('pt-BR')}</div>
+          <div class="home-stat-num" style="color:#3B6D11">R$ ${recebidoMes.toLocaleString('pt-BR')}</div>
           <div class="home-stat-label">Recebido</div>
         </div>
         <div class="home-stat-box">
-          <div class="home-stat-num" style="color:#993556">R$ ${totalPendente.toLocaleString('pt-BR')}</div>
+          <div class="home-stat-num" style="color:#993556">R$ ${pendentesMes.toLocaleString('pt-BR')}</div>
           <div class="home-stat-label">A receber</div>
         </div>
         <div class="home-stat-box" onclick="switchTab('cobrancas')">
