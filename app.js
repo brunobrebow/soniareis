@@ -446,6 +446,41 @@ async function pdvAddContact() {
   } catch (e) { showToast('Erro ao salvar.', '#A32D2D'); }
 }
 
+function pdvUpdatePhone() {
+  const sel = document.getElementById('pdv-contact');
+  const display = document.getElementById('pdv-phone-display');
+  if (sel && display) {
+    const c = state.contacts.find(c => c.id === sel.value);
+    display.textContent = c ? '+' + c.phone : '';
+  }
+}
+
+function pdvOpenEditContact() {
+  const sel = document.getElementById('pdv-contact');
+  if (sel) state._pdvEditId = sel.value;
+  state.modal = 'pdvEditContact';
+  render();
+}
+
+async function pdvSaveEditContact() {
+  const id = state._pdvEditId;
+  const name = document.getElementById('pdv-ec-name')?.value?.trim();
+  const local = document.getElementById('pdv-ec-local')?.value?.trim();
+  const phone = document.getElementById('pdv-ec-phone')?.value?.replace(/\D/g, '');
+  if (!name || !phone) { showToast('Nome e WhatsApp são obrigatórios', '#A32D2D'); return; }
+  try {
+    const updated = await DB.updateContact(id, { name, local: local || '', phone: '55' + phone });
+    const idx = state.contacts.findIndex(c => c.id === id);
+    if (idx >= 0) state.contacts[idx] = updated;
+    state.contacts.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    state.modal = null;
+    showToast('Contato atualizado!');
+    render();
+  } catch (e) {
+    showToast('Erro ao atualizar.', '#A32D2D');
+  }
+}
+
 async function pdvSubmit() {
   const contactId = document.getElementById('pdv-contact')?.value;
   const parcels = parseInt(document.getElementById('pdv-parcels')?.value) || 1;
@@ -573,14 +608,19 @@ function renderPDV() {
 
   // ── STEP: PAYMENT ──
   if (state.pdvStep === 'payment') {
-    const opts = state.contacts.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    const selId = state._pdvEditId || state.contacts[0]?.id;
+    const opts = state.contacts.map(c => `<option value="${c.id}" ${c.id === selId ? 'selected' : ''}>${c.name}</option>`).join('');
     return `<div class="pdv-overlay">${topbar}
       <div class="pdv-form">
         <div class="pdv-value-display">R$ ${pdvCartTotal().toLocaleString('pt-BR')}</div>
         <div class="pdv-form-group">
           <label class="pdv-form-label">Cliente</label>
-          <select class="form-input" id="pdv-contact">${opts}</select>
-          <button class="pdv-new-client" onclick="state.modal='pdvNewContact';render()">+ Nova cliente</button>
+          <select class="form-input" id="pdv-contact" onchange="pdvUpdatePhone()">${opts}</select>
+          <div id="pdv-phone-display" style="font-size:13px;color:#25D366;padding:6px 0">+${(state.contacts.find(c => c.id === selId) || state.contacts[0])?.phone || ''}</div>
+          <div style="display:flex;gap:16px">
+            <button class="pdv-new-client" onclick="state.modal='pdvNewContact';render()">+ Nova cliente</button>
+            <button class="pdv-new-client" onclick="pdvOpenEditContact()">✏️ Editar contato</button>
+          </div>
         </div>
         <div class="pdv-form-row">
           <div class="pdv-form-group" style="flex:1">
@@ -618,6 +658,21 @@ function renderPDV() {
             <button class="btn-cancel" onclick="state.modal=null;render()">Cancelar</button>
           </div>
         </div>` : ''}
+      ${state.modal === 'pdvEditContact' ? (() => {
+        const ec = state.contacts.find(c => c.id === state._pdvEditId);
+        if (!ec) return '';
+        const ph = ec.phone.startsWith('55') ? ec.phone.slice(2) : ec.phone;
+        return `<div class="modal-overlay" onclick="state.modal=null;render()">
+          <div class="modal-sheet" onclick="event.stopPropagation()">
+            <div class="modal-title">Editar contato</div>
+            <div class="form-group"><label class="form-label">Nome</label><input class="form-input" id="pdv-ec-name" value="${ec.name}" /></div>
+            <div class="form-group"><label class="form-label">Local</label><input class="form-input" id="pdv-ec-local" value="${ec.local || ''}" /></div>
+            <div class="form-group"><label class="form-label">WhatsApp (com DDD)</label><input class="form-input" id="pdv-ec-phone" type="tel" value="${ph}" /></div>
+            <button class="btn-primary" onclick="pdvSaveEditContact()">Salvar</button>
+            <button class="btn-cancel" onclick="state.modal=null;render()">Cancelar</button>
+          </div>
+        </div>`;
+      })() : ''}
     </div>`;
   }
 
