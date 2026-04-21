@@ -54,7 +54,7 @@ let state = {
   pdvStep: 'cart',
   pdvCart: [],
   pdvResult: null,
-  metaMensal: parseFloat(localStorage.getItem('srcrm_meta') || '0')
+  metaMensal: parseFloat(localStorage.getItem('srcrm_meta') || '20000')
 };
 
 // ---------- LOGIN ----------
@@ -787,18 +787,17 @@ function renderHome() {
             <div class="home-card-big" style="color:#1a1a1a">R$ ${vendasMes.toLocaleString('pt-BR')}</div>
           </div>
           <div style="text-align:right">
-            ${state.metaMensal > 0 ? `<div class="home-card-label">Meta</div><div class="home-card-big" style="color:#888">R$ ${state.metaMensal.toLocaleString('pt-BR')}</div>` : `<button class="home-meta-btn" onclick="setMeta()">Definir meta</button>`}
+            <div class="home-card-label">Meta</div>
+            <div class="home-card-big" style="color:#888">R$ ${state.metaMensal.toLocaleString('pt-BR')}</div>
           </div>
         </div>
-        ${state.metaMensal > 0 ? `
-          <div class="home-progress-bg">
-            <div class="home-progress-fill" style="width:${Math.min(100, Math.round(vendasMes / state.metaMensal * 100))}%"></div>
-          </div>
-          <div class="home-card-row" style="margin-top:4px">
-            <span class="home-card-sub">${Math.round(vendasMes / state.metaMensal * 100)}% da meta</span>
-            <span class="home-card-sub" style="cursor:pointer;text-decoration:underline" onclick="setMeta()">Alterar</span>
-          </div>
-        ` : ''}
+        <div class="home-progress-bg">
+          <div class="home-progress-fill" style="width:${Math.min(100, Math.round(vendasMes / state.metaMensal * 100))}%"></div>
+        </div>
+        <div class="home-card-row" style="margin-top:4px">
+          <span class="home-card-sub">${Math.round(vendasMes / state.metaMensal * 100)}% da meta</span>
+          <span class="home-card-sub home-meta-link" onclick="setMeta()">Alterar meta</span>
+        </div>
       </div>
 
       <div class="home-stats-row">

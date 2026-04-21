@@ -285,7 +285,7 @@ body {
 .pdv-receipt-cat { font-size: 11px; background: #333; padding: 2px 8px; border-radius: 10px; color: #aaa; }
 
 /* Home meta button */
-.home-meta-btn { background: none; border: 1px dashed #ccc; border-radius: 10px; padding: 8px 14px; color: #888; font-size: 13px; cursor: pointer; }
+.home-meta-link { cursor: pointer; color: #bbb; font-size: 11px; text-decoration: underline; }
 
 /* ─── MISC ─── */
 .empty-state { text-align: center; padding: 48px 20px; color: #bbb; font-size: 14px; line-height: 1.6; }
