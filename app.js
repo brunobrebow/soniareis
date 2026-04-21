@@ -818,8 +818,7 @@ function renderHome() {
         </div>
         <div class="home-stat-box" onclick="switchTab('cobrancas')">
           <div class="home-stat-num" style="color:#A32D2D">R$ ${atrasadoTotal.toLocaleString('pt-BR')}</div>
-          <div class="home-stat-label">Atrasadas</div>
-          <div class="home-stat-sub">${lateCharges.length} cobrança${lateCharges.length !== 1 ? 's' : ''}</div>
+          <div class="home-stat-label">Atrasadas (${lateCharges.length})</div>
         </div>
       </div>
 
