@@ -140,6 +140,9 @@ body {
 .home-action-btn { flex: 1; padding: 14px; background: #fff; border: 1px solid #e8e8e8; border-radius: 14px; text-align: center; font-size: 14px; font-weight: 500; color: #D4537E; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
 .home-action-btn:active { background: #FBEAF0; border-color: #D4537E; }
 
+.home-pdv-btn { width: 100%; padding: 16px; background: #D4537E; border: none; border-radius: 14px; color: white; font-size: 17px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.home-pdv-btn:active { background: #b8426a; }
+
 /* ─── CHARGE CARDS ─── */
 .day-header { padding: 18px 16px 8px; }
 .day-header-text { font-size: 13px; font-weight: 600; color: #555; letter-spacing: 0.02em; }
