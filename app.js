@@ -51,7 +51,10 @@ let state = {
   error: null,
   pdvMode: false,
   pdvLocked: false,
-  pdvStep: 'value'
+  pdvStep: 'cart',
+  pdvCart: [],
+  pdvResult: null,
+  metaMensal: parseFloat(localStorage.getItem('srcrm_meta') || '0')
 };
 
 // ---------- LOGIN ----------
@@ -362,7 +365,11 @@ async function confirmDeleteContact() {
 function enterPDV() {
   state.pdvMode = true;
   state.pdvLocked = false;
-  state.pdvStep = 'value';
+  state.pdvStep = 'cart';
+  state.pdvCart = [];
+  state.pdvResult = null;
+  state.modal = null;
+  document.querySelector('meta[name="theme-color"]').content = '#111111';
   render();
 }
 
@@ -370,6 +377,7 @@ function exitPDV() {
   if (state.pdvLocked) return;
   state.pdvMode = false;
   state.pdvLocked = false;
+  document.querySelector('meta[name="theme-color"]').content = '#D4537E';
   render();
 }
 
@@ -378,26 +386,47 @@ function togglePDVLock() {
   render();
 }
 
-function pdvNextStep() {
-  const val = document.getElementById('pdv-total')?.value;
-  const desc = document.getElementById('pdv-desc')?.value?.trim();
-  if (state.pdvStep === 'value') {
-    if (!val || parseFloat(val) <= 0) { showToast('Insira o valor', '#A32D2D'); return; }
-    state._pdvTotal = val;
-    state.pdvStep = 'details';
+function pdvAddItem() {
+  const input = document.getElementById('pdv-input');
+  const val = parseFloat(input?.value);
+  if (!val || val <= 0) { showToast('Insira um valor', '#A32D2D'); return; }
+  state.pdvCart.push({ value: val, description: '', category: '' });
+  render();
+}
+
+function pdvRemoveItem(i) {
+  state.pdvCart.splice(i, 1);
+  render();
+}
+
+function pdvCartTotal() {
+  return state.pdvCart.reduce((a, item) => a + item.value, 0);
+}
+
+function pdvGoDetails() {
+  if (state.pdvCart.length === 0) { showToast('Adicione pelo menos um item', '#A32D2D'); return; }
+  state.pdvStep = 'details';
+  render();
+}
+
+function pdvGoPayment() {
+  // Validate descriptions and categories
+  for (let i = 0; i < state.pdvCart.length; i++) {
+    const desc = document.getElementById('pdv-desc-' + i)?.value?.trim();
+    const cat = document.querySelector(`input[name="pdv-cat-${i}"]:checked`)?.value;
+    if (!desc) { showToast(`Preencha a descrição do item ${i + 1}`, '#A32D2D'); return; }
+    if (!cat) { showToast(`Selecione Jóia ou Mary Kay no item ${i + 1}`, '#A32D2D'); return; }
+    state.pdvCart[i].description = desc;
+    state.pdvCart[i].category = cat;
   }
+  state.pdvStep = 'payment';
   render();
 }
 
 function pdvBack() {
-  if (state.pdvStep === 'details') {
-    state.pdvStep = 'value';
-    render();
-    setTimeout(() => {
-      const t = document.getElementById('pdv-total');
-      if (t && state._pdvTotal) t.value = state._pdvTotal;
-    }, 10);
-  }
+  if (state.pdvStep === 'details') { state.pdvStep = 'cart'; render(); }
+  else if (state.pdvStep === 'payment') { state.pdvStep = 'details'; render(); }
+  else if (state.pdvStep === 'success') { state.pdvStep = 'cart'; state.pdvCart = []; state.pdvResult = null; render(); }
 }
 
 async function pdvAddContact() {
@@ -406,101 +435,143 @@ async function pdvAddContact() {
   const phone = document.getElementById('pdv-nc-phone')?.value?.replace(/\D/g, '');
   if (!name || !phone) { showToast('Nome e WhatsApp são obrigatórios', '#A32D2D'); return; }
   try {
-    const newContact = await DB.addContact({ name, local: local || '', phone: '55' + phone });
-    state.contacts.push(newContact);
+    const nc = await DB.addContact({ name, local: local || '', phone: '55' + phone });
+    state.contacts.push(nc);
     state.contacts.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
     state.modal = null;
     showToast('Cliente cadastrada!');
     render();
-  } catch (e) {
-    showToast('Erro ao salvar.', '#A32D2D');
-  }
+  } catch (e) { showToast('Erro ao salvar.', '#A32D2D'); }
 }
 
 async function pdvSubmit() {
-  const total = parseFloat(state._pdvTotal) || 0;
-  const desc = document.getElementById('pdv-desc')?.value?.trim();
   const contactId = document.getElementById('pdv-contact')?.value;
   const parcels = parseInt(document.getElementById('pdv-parcels')?.value) || 1;
   const day = parseInt(document.getElementById('pdv-day')?.value) || 28;
-  if (!total || !desc || !contactId) { showToast('Preencha todos os campos', '#A32D2D'); return; }
+  const method = document.querySelector('input[name="pdv-method"]:checked')?.value || 'pix';
+  if (!contactId) { showToast('Selecione a cliente', '#A32D2D'); return; }
+
+  const contact = getContact(contactId);
+  const items = [];
+
   try {
-    const newSale = await DB.addSale({
-      contact_id: contactId,
-      description: desc,
-      total,
-      parcels,
-      parcel_value: Math.round(total / parcels),
-      start_day: day,
-      payment_method: 'pix'
-    });
-    state.sales.push(newSale);
-    const newPayments = await DB.initPayments(newSale.id, parcels);
-    state.payments.push(...newPayments);
-    showToast('Venda registrada!');
-    state._pdvTotal = null;
-    state.pdvStep = 'value';
+    for (const item of state.pdvCart) {
+      const newSale = await DB.addSale({
+        contact_id: contactId,
+        description: item.description,
+        total: item.value,
+        parcels,
+        parcel_value: Math.round(item.value / parcels),
+        start_day: day,
+        payment_method: method,
+        category: item.category
+      });
+      state.sales.push(newSale);
+      const newPayments = await DB.initPayments(newSale.id, parcels);
+      state.payments.push(...newPayments);
+      items.push({ ...item, parcel_value: Math.round(item.value / parcels) });
+    }
+
+    state.pdvResult = { items, contact, parcels, day, method, total: pdvCartTotal() };
+    state.pdvStep = 'success';
     render();
   } catch (e) {
     showToast('Erro ao salvar.', '#A32D2D');
+    console.error(e);
   }
 }
 
+function pdvShareWhatsApp() {
+  const r = state.pdvResult;
+  if (!r) return;
+  const parcelVal = Math.round(r.total / r.parcels);
+  let msg = `*Resumo da compra*\n\n`;
+  r.items.forEach((item, i) => {
+    msg += `• ${item.description} (${item.category === 'joia' ? 'Jóia' : 'Mary Kay'}) — R$ ${item.value.toLocaleString('pt-BR')}\n`;
+  });
+  msg += `\n*Total: R$ ${r.total.toLocaleString('pt-BR')}*\n`;
+  msg += `*${r.parcels}x de R$ ${parcelVal.toLocaleString('pt-BR')}*\n`;
+  msg += `Vencimento: todo dia ${r.day}\n`;
+  msg += `Pagamento: ${r.method === 'pix' ? 'Pix' : 'Cartão'}\n\n`;
+  msg += `Obrigada pela compra! 💖`;
+  const url = `https://wa.me/${r.contact.phone}?text=${encodeURIComponent(msg)}`;
+  window.open(url, '_blank');
+}
+
 function renderPDV() {
-  const lockIcon = state.pdvLocked
+  const lockSvg = state.pdvLocked
     ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18 10h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v4H6c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-8c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v4z"/></svg>'
     : '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 17c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm6-9h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h1.9c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v2H6c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-8c0-1.1-.9-2-2-2z"/></svg>';
 
-  if (state.pdvStep === 'value') {
-    return `
-      <div class="pdv-overlay">
-        <div class="pdv-topbar">
-          <button class="pdv-close" onclick="exitPDV()" ${state.pdvLocked ? 'disabled style="opacity:0.3"' : ''}>✕</button>
-          <span class="pdv-title">Modo Venda</span>
-          <button class="pdv-lock ${state.pdvLocked ? 'pdv-locked' : ''}" onclick="togglePDVLock()">${lockIcon}</button>
+  const topbar = `<div class="pdv-topbar">
+    <button class="pdv-close" onclick="${state.pdvStep === 'cart' ? 'exitPDV()' : 'pdvBack()'}" ${state.pdvLocked && state.pdvStep === 'cart' ? 'disabled style="opacity:0.3"' : ''}>${state.pdvStep === 'cart' ? '✕' : '‹'}</button>
+    <span class="pdv-title">${state.pdvStep === 'success' ? 'Venda registrada' : 'Modo Venda'}</span>
+    <button class="pdv-lock ${state.pdvLocked ? 'pdv-locked' : ''}" onclick="togglePDVLock()" ${state.pdvStep === 'success' ? 'style="visibility:hidden"' : ''}>${lockSvg}</button>
+  </div>`;
+
+  // ── STEP: CART ──
+  if (state.pdvStep === 'cart') {
+    const total = pdvCartTotal();
+    return `<div class="pdv-overlay">${topbar}
+      <div class="pdv-center">
+        <div class="pdv-total-display">R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+        <div class="pdv-label">${state.pdvCart.length} ${state.pdvCart.length === 1 ? 'item' : 'itens'}</div>
+        ${state.pdvCart.length > 0 ? `<div class="pdv-cart-list">${state.pdvCart.map((item, i) =>
+          `<div class="pdv-cart-item"><span>R$ ${item.value.toLocaleString('pt-BR')}</span><button class="pdv-cart-rm" onclick="pdvRemoveItem(${i})">✕</button></div>`
+        ).join('')}</div>` : ''}
+      </div>
+      <div class="pdv-bottom">
+        <div class="pdv-add-row">
+          <span class="pdv-add-rs">R$</span>
+          <input class="pdv-add-input" id="pdv-input" type="number" inputmode="decimal" placeholder="0,00" onkeydown="if(event.key==='Enter')pdvAddItem()" />
+          <button class="pdv-add-btn" onclick="pdvAddItem()">+</button>
         </div>
-        <div class="pdv-center">
-          <div class="pdv-label">Valor da venda</div>
-          <div class="pdv-input-row">
-            <span class="pdv-currency">R$</span>
-            <input class="pdv-value-input" id="pdv-total" type="number" inputmode="decimal" placeholder="0,00" autofocus />
-          </div>
-        </div>
-        <div class="pdv-bottom">
-          <button class="pdv-btn-next" onclick="pdvNextStep()">Continuar</button>
-        </div>
-      </div>`;
+        ${state.pdvCart.length > 0 ? `<button class="pdv-btn-next" onclick="pdvGoDetails()">Continuar</button>` : ''}
+      </div>
+    </div>`;
   }
 
-  // Step 2: details
-  const contactOptions = state.contacts.map(c =>
-    `<option value="${c.id}">${c.name}</option>`
-  ).join('');
-
-  return `
-    <div class="pdv-overlay">
-      <div class="pdv-topbar">
-        <button class="pdv-close" onclick="pdvBack()">‹</button>
-        <span class="pdv-title">Detalhes</span>
-        <button class="pdv-lock ${state.pdvLocked ? 'pdv-locked' : ''}" onclick="togglePDVLock()">${lockIcon}</button>
-      </div>
+  // ── STEP: DETAILS ──
+  if (state.pdvStep === 'details') {
+    return `<div class="pdv-overlay">${topbar}
       <div class="pdv-form">
-        <div class="pdv-value-display">R$ ${parseFloat(state._pdvTotal || 0).toLocaleString('pt-BR')}</div>
-        <div class="pdv-form-group">
-          <label class="pdv-form-label">Peça / Descrição</label>
-          <input class="form-input" id="pdv-desc" placeholder="Ex: Colar de pérolas" />
-        </div>
+        <div class="pdv-value-display">R$ ${pdvCartTotal().toLocaleString('pt-BR')} · ${state.pdvCart.length} ${state.pdvCart.length === 1 ? 'item' : 'itens'}</div>
+        ${state.pdvCart.map((item, i) => `
+          <div class="pdv-detail-card">
+            <div class="pdv-detail-val">R$ ${item.value.toLocaleString('pt-BR')}</div>
+            <div class="pdv-form-group">
+              <label class="pdv-form-label">Descrição</label>
+              <input class="form-input" id="pdv-desc-${i}" placeholder="Ex: Colar de pérolas" value="${item.description}" />
+            </div>
+            <div class="pdv-cat-row">
+              <label class="pdv-cat-opt"><input type="radio" name="pdv-cat-${i}" value="joia" ${item.category === 'joia' ? 'checked' : ''} /> Jóia</label>
+              <label class="pdv-cat-opt"><input type="radio" name="pdv-cat-${i}" value="marykay" ${item.category === 'marykay' ? 'checked' : ''} /> Mary Kay</label>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      <div class="pdv-bottom">
+        <button class="pdv-btn-next" onclick="pdvGoPayment()">Continuar</button>
+      </div>
+    </div>`;
+  }
+
+  // ── STEP: PAYMENT ──
+  if (state.pdvStep === 'payment') {
+    const opts = state.contacts.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    return `<div class="pdv-overlay">${topbar}
+      <div class="pdv-form">
+        <div class="pdv-value-display">R$ ${pdvCartTotal().toLocaleString('pt-BR')}</div>
         <div class="pdv-form-group">
           <label class="pdv-form-label">Cliente</label>
-          <select class="form-input" id="pdv-contact">${contactOptions}</select>
+          <select class="form-input" id="pdv-contact">${opts}</select>
           <button class="pdv-new-client" onclick="state.modal='pdvNewContact';render()">+ Nova cliente</button>
         </div>
         <div class="pdv-form-row">
           <div class="pdv-form-group" style="flex:1">
             <label class="pdv-form-label">Parcelas</label>
             <select class="form-input" id="pdv-parcels">
-              <option value="1">1x</option><option value="2">2x</option><option value="3" selected>3x</option>
-              <option value="4">4x</option><option value="5">5x</option><option value="6">6x</option>
+              ${Array.from({length:12},(_,i)=>`<option value="${i+1}" ${i===2?'selected':''}>${i+1}x</option>`).join('')}
             </select>
           </div>
           <div class="pdv-form-group" style="flex:1">
@@ -508,22 +579,67 @@ function renderPDV() {
             <input class="form-input" id="pdv-day" type="number" value="28" min="1" max="31" />
           </div>
         </div>
+        <div class="pdv-form-group">
+          <label class="pdv-form-label">Forma de pagamento</label>
+          <div class="pdv-cat-row">
+            <label class="pdv-cat-opt"><input type="radio" name="pdv-method" value="pix" checked /> Pix</label>
+            <label class="pdv-cat-opt"><input type="radio" name="pdv-method" value="cartao" /> Cartão</label>
+          </div>
+        </div>
       </div>
       <div class="pdv-bottom">
         <button class="pdv-btn-next pdv-btn-confirm" onclick="pdvSubmit()">Registrar venda</button>
       </div>
-    </div>
-    ${state.modal === 'pdvNewContact' ? `
-      <div class="modal-overlay" onclick="state.modal=null;render()">
-        <div class="modal-sheet" onclick="event.stopPropagation()">
-          <div class="modal-title">Nova cliente</div>
-          <div class="form-group"><label class="form-label">Nome</label><input class="form-input" id="pdv-nc-name" placeholder="Ex: Renata Lima" /></div>
-          <div class="form-group"><label class="form-label">Local</label><input class="form-input" id="pdv-nc-local" placeholder="Ex: Posto de Saúde" /></div>
-          <div class="form-group"><label class="form-label">WhatsApp (com DDD)</label><input class="form-input" id="pdv-nc-phone" type="tel" placeholder="43 99999-0000" /></div>
-          <button class="btn-primary" onclick="pdvAddContact()">Cadastrar</button>
-          <button class="btn-cancel" onclick="state.modal=null;render()">Cancelar</button>
+      ${state.modal === 'pdvNewContact' ? `
+        <div class="modal-overlay" onclick="state.modal=null;render()">
+          <div class="modal-sheet" onclick="event.stopPropagation()">
+            <div class="modal-title">Nova cliente</div>
+            <div class="form-group"><label class="form-label">Nome</label><input class="form-input" id="pdv-nc-name" placeholder="Ex: Renata Lima" /></div>
+            <div class="form-group"><label class="form-label">Local</label><input class="form-input" id="pdv-nc-local" placeholder="Ex: Posto de Saúde" /></div>
+            <div class="form-group"><label class="form-label">WhatsApp (com DDD)</label><input class="form-input" id="pdv-nc-phone" type="tel" placeholder="43 99999-0000" /></div>
+            <button class="btn-primary" onclick="pdvAddContact()">Cadastrar</button>
+            <button class="btn-cancel" onclick="state.modal=null;render()">Cancelar</button>
+          </div>
+        </div>` : ''}
+    </div>`;
+  }
+
+  // ── STEP: SUCCESS ──
+  if (state.pdvStep === 'success' && state.pdvResult) {
+    const r = state.pdvResult;
+    const pv = Math.round(r.total / r.parcels);
+    return `<div class="pdv-overlay">${topbar}
+      <div class="pdv-success-scroll">
+        <div class="pdv-success-icon">✓</div>
+        <div class="pdv-success-title">Venda registrada!</div>
+
+        <div class="pdv-receipt">
+          <div class="pdv-receipt-hero">
+            <div class="pdv-receipt-day">Dia ${r.day}</div>
+            <div class="pdv-receipt-parcels">${r.parcels}x de R$ ${pv.toLocaleString('pt-BR')}</div>
+          </div>
+          <div class="pdv-receipt-divider"></div>
+          <div class="pdv-receipt-row"><span>Cliente</span><span>${r.contact.name}</span></div>
+          <div class="pdv-receipt-row"><span>Total</span><span>R$ ${r.total.toLocaleString('pt-BR')}</span></div>
+          <div class="pdv-receipt-row"><span>Pagamento</span><span>${r.method === 'pix' ? 'Pix' : 'Cartão'}</span></div>
+          <div class="pdv-receipt-divider"></div>
+          ${r.items.map(item => `
+            <div class="pdv-receipt-item">
+              <span>${item.description}</span>
+              <span class="pdv-receipt-cat">${item.category === 'joia' ? 'Jóia' : 'Mary Kay'}</span>
+              <span>R$ ${item.value.toLocaleString('pt-BR')}</span>
+            </div>
+          `).join('')}
         </div>
-      </div>` : ''}`;
+      </div>
+      <div class="pdv-bottom" style="display:flex;flex-direction:column;gap:8px">
+        <button class="pdv-btn-next" style="background:#25D366" onclick="pdvShareWhatsApp()"><svg width="18" height="18" viewBox="0 0 24 24" fill="white" style="vertical-align:middle;margin-right:6px"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.49a.75.75 0 00.914.914l4.456-1.495A11.952 11.952 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.34 0-4.508-.758-6.26-2.04l-.438-.33-3.222 1.08 1.08-3.222-.33-.438A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>Enviar resumo</button>
+        <button class="pdv-btn-next" style="background:#333" onclick="pdvBack()">Nova venda</button>
+      </div>
+    </div>`;
+  }
+
+  return '';
 }
 
 // ---------- NAVIGATION ----------
@@ -613,6 +729,16 @@ function renderNav() {
 
 // ---------- SCREENS ----------
 
+function setMeta() {
+  const val = prompt('Defina sua meta mensal de vendas (R$):');
+  const num = parseFloat(val);
+  if (num && num > 0) {
+    state.metaMensal = num;
+    localStorage.setItem('srcrm_meta', String(num));
+    render();
+  }
+}
+
 function renderHome() {
   const today = new Date();
   const diasSemana = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
@@ -620,9 +746,15 @@ function renderHome() {
   const diaSemana = diasSemana[today.getDay()];
   const diaNum = today.getDate();
   const mes = meses[today.getMonth()];
+  const mesAtual = today.getMonth();
+  const anoAtual = today.getFullYear();
 
-  // Stats
-  const totalVendido = state.sales.reduce((a, s) => a + s.total, 0);
+  // Monthly sales
+  const vendasMes = state.sales.filter(s => {
+    const d = new Date(s.created_at);
+    return d.getMonth() === mesAtual && d.getFullYear() === anoAtual;
+  }).reduce((a, s) => a + s.total, 0);
+
   const totalRecebido = state.payments.filter(p => p.paid).reduce((a, p) => {
     const sale = state.sales.find(s => s.id === p.sale_id);
     return a + (p.paid_amount || sale?.parcel_value || 0);
@@ -651,21 +783,22 @@ function renderHome() {
       <div class="home-card home-card-main">
         <div class="home-card-row">
           <div>
-            <div class="home-card-label">Total vendido</div>
-            <div class="home-card-big" style="color:#1a1a1a">R$ ${totalVendido.toLocaleString('pt-BR')}</div>
+            <div class="home-card-label">Vendas este mês</div>
+            <div class="home-card-big" style="color:#1a1a1a">R$ ${vendasMes.toLocaleString('pt-BR')}</div>
           </div>
           <div style="text-align:right">
-            <div class="home-card-label">Recebido</div>
-            <div class="home-card-big" style="color:#3B6D11">R$ ${totalRecebido.toLocaleString('pt-BR')}</div>
+            ${state.metaMensal > 0 ? `<div class="home-card-label">Meta</div><div class="home-card-big" style="color:#888">R$ ${state.metaMensal.toLocaleString('pt-BR')}</div>` : `<button class="home-meta-btn" onclick="setMeta()">Definir meta</button>`}
           </div>
         </div>
-        <div class="home-progress-bg">
-          <div class="home-progress-fill" style="width:${totalVendido > 0 ? Math.round(totalRecebido / totalVendido * 100) : 0}%"></div>
-        </div>
-        <div class="home-card-row" style="margin-top:4px">
-          <span class="home-card-sub">${totalVendido > 0 ? Math.round(totalRecebido / totalVendido * 100) : 0}% recebido</span>
-          <span class="home-card-sub">Falta R$ ${totalPendente.toLocaleString('pt-BR')}</span>
-        </div>
+        ${state.metaMensal > 0 ? `
+          <div class="home-progress-bg">
+            <div class="home-progress-fill" style="width:${Math.min(100, Math.round(vendasMes / state.metaMensal * 100))}%"></div>
+          </div>
+          <div class="home-card-row" style="margin-top:4px">
+            <span class="home-card-sub">${Math.round(vendasMes / state.metaMensal * 100)}% da meta</span>
+            <span class="home-card-sub" style="cursor:pointer;text-decoration:underline" onclick="setMeta()">Alterar</span>
+          </div>
+        ` : ''}
       </div>
 
       <div class="home-stats-row">
@@ -674,14 +807,13 @@ function renderHome() {
           <div class="home-stat-label">Atrasadas</div>
           ${atrasadoTotal > 0 ? `<div class="home-stat-sub">R$ ${atrasadoTotal.toLocaleString('pt-BR')}</div>` : ''}
         </div>
-        <div class="home-stat-box" onclick="switchTab('cobrancas')">
-          <div class="home-stat-num" style="color:#D4537E">${todayCharges.length}</div>
-          <div class="home-stat-label">Vencem hoje</div>
+        <div class="home-stat-box">
+          <div class="home-stat-num" style="color:#3B6D11">R$ ${totalRecebido.toLocaleString('pt-BR')}</div>
+          <div class="home-stat-label">Recebido</div>
         </div>
-        <div class="home-stat-box" onclick="switchTab('contatos')">
-          <div class="home-stat-num" style="color:#1a1a1a">${state.contacts.length}</div>
-          <div class="home-stat-label">Clientes</div>
-          <div class="home-stat-sub">${clientesAtivas} ativas</div>
+        <div class="home-stat-box">
+          <div class="home-stat-num" style="color:#993556">R$ ${totalPendente.toLocaleString('pt-BR')}</div>
+          <div class="home-stat-label">A receber</div>
         </div>
       </div>
 

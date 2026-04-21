@@ -18,6 +18,7 @@ create table if not exists sales (
   parcel_value numeric,
   start_day int,
   payment_method text default 'pix',
+  category text,
   created_at timestamptz default now()
 );
 
