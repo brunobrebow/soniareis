@@ -48,7 +48,10 @@ let state = {
   paidModal: null,
   deleteContactModal: null,
   loading: true,
-  error: null
+  error: null,
+  pdvMode: false,
+  pdvLocked: false,
+  pdvStep: 'value'
 };
 
 // ---------- LOGIN ----------
@@ -354,6 +357,175 @@ async function confirmDeleteContact() {
   }
 }
 
+// ---------- PDV MODE ----------
+
+function enterPDV() {
+  state.pdvMode = true;
+  state.pdvLocked = false;
+  state.pdvStep = 'value';
+  render();
+}
+
+function exitPDV() {
+  if (state.pdvLocked) return;
+  state.pdvMode = false;
+  state.pdvLocked = false;
+  render();
+}
+
+function togglePDVLock() {
+  state.pdvLocked = !state.pdvLocked;
+  render();
+}
+
+function pdvNextStep() {
+  const val = document.getElementById('pdv-total')?.value;
+  const desc = document.getElementById('pdv-desc')?.value?.trim();
+  if (state.pdvStep === 'value') {
+    if (!val || parseFloat(val) <= 0) { showToast('Insira o valor', '#A32D2D'); return; }
+    state._pdvTotal = val;
+    state.pdvStep = 'details';
+  }
+  render();
+}
+
+function pdvBack() {
+  if (state.pdvStep === 'details') {
+    state.pdvStep = 'value';
+    render();
+    setTimeout(() => {
+      const t = document.getElementById('pdv-total');
+      if (t && state._pdvTotal) t.value = state._pdvTotal;
+    }, 10);
+  }
+}
+
+async function pdvAddContact() {
+  const name = document.getElementById('pdv-nc-name')?.value?.trim();
+  const local = document.getElementById('pdv-nc-local')?.value?.trim();
+  const phone = document.getElementById('pdv-nc-phone')?.value?.replace(/\D/g, '');
+  if (!name || !phone) { showToast('Nome e WhatsApp são obrigatórios', '#A32D2D'); return; }
+  try {
+    const newContact = await DB.addContact({ name, local: local || '', phone: '55' + phone });
+    state.contacts.push(newContact);
+    state.contacts.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    state.modal = null;
+    showToast('Cliente cadastrada!');
+    render();
+  } catch (e) {
+    showToast('Erro ao salvar.', '#A32D2D');
+  }
+}
+
+async function pdvSubmit() {
+  const total = parseFloat(state._pdvTotal) || 0;
+  const desc = document.getElementById('pdv-desc')?.value?.trim();
+  const contactId = document.getElementById('pdv-contact')?.value;
+  const parcels = parseInt(document.getElementById('pdv-parcels')?.value) || 1;
+  const day = parseInt(document.getElementById('pdv-day')?.value) || 28;
+  if (!total || !desc || !contactId) { showToast('Preencha todos os campos', '#A32D2D'); return; }
+  try {
+    const newSale = await DB.addSale({
+      contact_id: contactId,
+      description: desc,
+      total,
+      parcels,
+      parcel_value: Math.round(total / parcels),
+      start_day: day,
+      payment_method: 'pix'
+    });
+    state.sales.push(newSale);
+    const newPayments = await DB.initPayments(newSale.id, parcels);
+    state.payments.push(...newPayments);
+    showToast('Venda registrada!');
+    state._pdvTotal = null;
+    state.pdvStep = 'value';
+    render();
+  } catch (e) {
+    showToast('Erro ao salvar.', '#A32D2D');
+  }
+}
+
+function renderPDV() {
+  const lockIcon = state.pdvLocked
+    ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18 10h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v4H6c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-8c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v4z"/></svg>'
+    : '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 17c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm6-9h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h1.9c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v2H6c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-8c0-1.1-.9-2-2-2z"/></svg>';
+
+  if (state.pdvStep === 'value') {
+    return `
+      <div class="pdv-overlay">
+        <div class="pdv-topbar">
+          <button class="pdv-close" onclick="exitPDV()" ${state.pdvLocked ? 'disabled style="opacity:0.3"' : ''}>✕</button>
+          <span class="pdv-title">Modo Venda</span>
+          <button class="pdv-lock ${state.pdvLocked ? 'pdv-locked' : ''}" onclick="togglePDVLock()">${lockIcon}</button>
+        </div>
+        <div class="pdv-center">
+          <div class="pdv-label">Valor da venda</div>
+          <div class="pdv-input-row">
+            <span class="pdv-currency">R$</span>
+            <input class="pdv-value-input" id="pdv-total" type="number" inputmode="decimal" placeholder="0,00" autofocus />
+          </div>
+        </div>
+        <div class="pdv-bottom">
+          <button class="pdv-btn-next" onclick="pdvNextStep()">Continuar</button>
+        </div>
+      </div>`;
+  }
+
+  // Step 2: details
+  const contactOptions = state.contacts.map(c =>
+    `<option value="${c.id}">${c.name}</option>`
+  ).join('');
+
+  return `
+    <div class="pdv-overlay">
+      <div class="pdv-topbar">
+        <button class="pdv-close" onclick="pdvBack()">‹</button>
+        <span class="pdv-title">Detalhes</span>
+        <button class="pdv-lock ${state.pdvLocked ? 'pdv-locked' : ''}" onclick="togglePDVLock()">${lockIcon}</button>
+      </div>
+      <div class="pdv-form">
+        <div class="pdv-value-display">R$ ${parseFloat(state._pdvTotal || 0).toLocaleString('pt-BR')}</div>
+        <div class="pdv-form-group">
+          <label class="pdv-form-label">Peça / Descrição</label>
+          <input class="form-input" id="pdv-desc" placeholder="Ex: Colar de pérolas" />
+        </div>
+        <div class="pdv-form-group">
+          <label class="pdv-form-label">Cliente</label>
+          <select class="form-input" id="pdv-contact">${contactOptions}</select>
+          <button class="pdv-new-client" onclick="state.modal='pdvNewContact';render()">+ Nova cliente</button>
+        </div>
+        <div class="pdv-form-row">
+          <div class="pdv-form-group" style="flex:1">
+            <label class="pdv-form-label">Parcelas</label>
+            <select class="form-input" id="pdv-parcels">
+              <option value="1">1x</option><option value="2">2x</option><option value="3" selected>3x</option>
+              <option value="4">4x</option><option value="5">5x</option><option value="6">6x</option>
+            </select>
+          </div>
+          <div class="pdv-form-group" style="flex:1">
+            <label class="pdv-form-label">Dia cobrança</label>
+            <input class="form-input" id="pdv-day" type="number" value="28" min="1" max="31" />
+          </div>
+        </div>
+      </div>
+      <div class="pdv-bottom">
+        <button class="pdv-btn-next pdv-btn-confirm" onclick="pdvSubmit()">Registrar venda</button>
+      </div>
+    </div>
+    ${state.modal === 'pdvNewContact' ? `
+      <div class="modal-overlay" onclick="state.modal=null;render()">
+        <div class="modal-sheet" onclick="event.stopPropagation()">
+          <div class="modal-title">Nova cliente</div>
+          <div class="form-group"><label class="form-label">Nome</label><input class="form-input" id="pdv-nc-name" placeholder="Ex: Renata Lima" /></div>
+          <div class="form-group"><label class="form-label">Local</label><input class="form-input" id="pdv-nc-local" placeholder="Ex: Posto de Saúde" /></div>
+          <div class="form-group"><label class="form-label">WhatsApp (com DDD)</label><input class="form-input" id="pdv-nc-phone" type="tel" placeholder="43 99999-0000" /></div>
+          <button class="btn-primary" onclick="pdvAddContact()">Cadastrar</button>
+          <button class="btn-cancel" onclick="state.modal=null;render()">Cancelar</button>
+        </div>
+      </div>` : ''}`;
+}
+
 // ---------- NAVIGATION ----------
 
 function switchTab(tab) { state.tab = tab; state.detail = null; state.financeDetail = null; render(); }
@@ -408,6 +580,7 @@ function render() {
   else html = renderFinanceiro();
 
   if (state.detail) html += renderDetail(state.detail);
+  if (state.pdvMode) html += renderPDV();
   html += renderModal();
   screen.innerHTML = html;
   renderNav();
@@ -424,7 +597,7 @@ function renderNav() {
 
   const nav = document.getElementById('bottomnav');
   if (nav) {
-    const anyOverlay = state.modal || state.detail || state.chargeModal || state.paidModal || state.deleteContactModal;
+    const anyOverlay = state.modal || state.detail || state.chargeModal || state.paidModal || state.deleteContactModal || state.pdvMode;
     if (anyOverlay) {
       nav.style.display = 'none';
     } else {
@@ -537,8 +710,8 @@ function renderHome() {
         <div class="home-action-btn" onclick="switchTab('contatos');setTimeout(()=>openModal('addContact'),100)">
           <span>＋</span> Nova cliente
         </div>
-        <div class="home-action-btn" onclick="switchTab('cobrancas');setTimeout(()=>openModal('addSale'),100)">
-          <span>＋</span> Nova venda
+        <div class="home-action-btn" onclick="enterPDV()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> Modo Venda
         </div>
       </div>
     </div>`;
