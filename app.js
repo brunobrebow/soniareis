@@ -414,10 +414,12 @@ function pdvGoPayment() {
   for (let i = 0; i < state.pdvCart.length; i++) {
     const desc = document.getElementById('pdv-desc-' + i)?.value?.trim();
     const cat = document.querySelector(`input[name="pdv-cat-${i}"]:checked`)?.value;
+    const qty = parseInt(document.getElementById('pdv-qty-' + i)?.value) || 1;
     if (!desc) { showToast(`Preencha a descrição do item ${i + 1}`, '#A32D2D'); return; }
     if (!cat) { showToast(`Selecione Jóia ou Mary Kay no item ${i + 1}`, '#A32D2D'); return; }
     state.pdvCart[i].description = desc;
     state.pdvCart[i].category = cat;
+    state.pdvCart[i].qty = qty;
   }
   state.pdvStep = 'payment';
   render();
@@ -456,9 +458,10 @@ async function pdvSubmit() {
 
   try {
     for (const item of state.pdvCart) {
+      const descWithQty = (item.qty || 1) > 1 ? `${item.qty}x ${item.description}` : item.description;
       const newSale = await DB.addSale({
         contact_id: contactId,
-        description: item.description,
+        description: descWithQty,
         total: item.value,
         parcels,
         parcel_value: Math.round(item.value / parcels),
@@ -487,7 +490,7 @@ function pdvShareWhatsApp() {
   const parcelVal = Math.round(r.total / r.parcels);
   let msg = `*Resumo da compra*\n\n`;
   r.items.forEach((item, i) => {
-    msg += `• ${item.description} (${item.category === 'joia' ? 'Jóia' : 'Mary Kay'}) — R$ ${item.value.toLocaleString('pt-BR')}\n`;
+    msg += `• ${item.qty > 1 ? item.qty + 'x ' : ''}${item.description} (${item.category === 'joia' ? 'Jóia' : 'Mary Kay'}) — R$ ${item.value.toLocaleString('pt-BR')}\n`;
   });
   msg += `\n*Total: R$ ${r.total.toLocaleString('pt-BR')}*\n`;
   msg += `*${r.parcels}x de R$ ${parcelVal.toLocaleString('pt-BR')}*\n`;
@@ -541,11 +544,23 @@ function renderPDV() {
             <div class="pdv-detail-val">R$ ${item.value.toLocaleString('pt-BR')}</div>
             <div class="pdv-form-group">
               <label class="pdv-form-label">Descrição</label>
-              <input class="form-input" id="pdv-desc-${i}" placeholder="Ex: Colar de pérolas" value="${item.description}" />
+              <input class="form-input" id="pdv-desc-${i}" placeholder="Nome do produto" value="${item.description}" />
             </div>
-            <div class="pdv-cat-row">
-              <label class="pdv-cat-opt"><input type="radio" name="pdv-cat-${i}" value="joia" ${item.category === 'joia' ? 'checked' : ''} /> Jóia</label>
-              <label class="pdv-cat-opt"><input type="radio" name="pdv-cat-${i}" value="marykay" ${item.category === 'marykay' ? 'checked' : ''} /> Mary Kay</label>
+            <div class="pdv-form-row">
+              <div class="pdv-form-group" style="flex:1">
+                <label class="pdv-form-label">Quantidade</label>
+                <input class="form-input" id="pdv-qty-${i}" type="number" min="1" value="${item.qty || 1}" inputmode="numeric" />
+              </div>
+              <div style="flex:2"></div>
+            </div>
+            <div class="pdv-form-group">
+              <label class="pdv-form-label">Categoria</label>
+              <div class="pdv-toggle-row">
+                <input type="radio" name="pdv-cat-${i}" id="pdv-cat-${i}-joia" value="joia" ${item.category === 'joia' ? 'checked' : ''} class="pdv-toggle-input" />
+                <label for="pdv-cat-${i}-joia" class="pdv-toggle-btn">Jóia</label>
+                <input type="radio" name="pdv-cat-${i}" id="pdv-cat-${i}-mk" value="marykay" ${item.category === 'marykay' ? 'checked' : ''} class="pdv-toggle-input" />
+                <label for="pdv-cat-${i}-mk" class="pdv-toggle-btn">Mary Kay</label>
+              </div>
             </div>
           </div>
         `).join('')}
@@ -581,9 +596,11 @@ function renderPDV() {
         </div>
         <div class="pdv-form-group">
           <label class="pdv-form-label">Forma de pagamento</label>
-          <div class="pdv-cat-row">
-            <label class="pdv-cat-opt"><input type="radio" name="pdv-method" value="pix" checked /> Pix</label>
-            <label class="pdv-cat-opt"><input type="radio" name="pdv-method" value="cartao" /> Cartão</label>
+          <div class="pdv-toggle-row">
+            <input type="radio" name="pdv-method" id="pdv-method-pix" value="pix" checked class="pdv-toggle-input" />
+            <label for="pdv-method-pix" class="pdv-toggle-btn">Pix</label>
+            <input type="radio" name="pdv-method" id="pdv-method-cartao" value="cartao" class="pdv-toggle-input" />
+            <label for="pdv-method-cartao" class="pdv-toggle-btn">Cartão</label>
           </div>
         </div>
       </div>
@@ -625,7 +642,7 @@ function renderPDV() {
           <div class="pdv-receipt-divider"></div>
           ${r.items.map(item => `
             <div class="pdv-receipt-item">
-              <span>${item.description}</span>
+              <span>${item.qty > 1 ? item.qty + 'x ' : ''}${item.description}</span>
               <span class="pdv-receipt-cat">${item.category === 'joia' ? 'Jóia' : 'Mary Kay'}</span>
               <span>R$ ${item.value.toLocaleString('pt-BR')}</span>
             </div>
