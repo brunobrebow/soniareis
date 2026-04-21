@@ -106,12 +106,39 @@ body {
 .badge-late { background: #FCEBEB; color: #A32D2D; }
 
 /* ─── BOTTOM NAV ─── */
-.bottomnav { position: fixed; bottom: 0; left: 0; right: 0; max-width: 430px; margin: 0 auto; background: #ffffff; border-top: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-around; padding: 10px 8px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); z-index: 200; }
-.nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; padding: 8px 20px; border-radius: 12px; flex: 1; }
-.nav-item.active { background: #FBEAF0; }
-.nav-icon { font-size: 22px; }
-.nav-label { font-size: 11px; color: #aaa; }
-.nav-item.active .nav-label { color: #993556; font-weight: 600; }
+.bottomnav { position: fixed; bottom: 0; left: 0; right: 0; max-width: 430px; margin: 0 auto; background: #ffffff; border-top: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-around; padding: 12px 8px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 200; }
+.nav-item { display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 8px 16px; border-radius: 12px; color: #bbb; transition: all 0.15s; }
+.nav-item.active { background: #FBEAF0; color: #D4537E; }
+.nav-icon { display: flex; align-items: center; justify-content: center; }
+
+/* ─── HOME DASHBOARD ─── */
+.home-header { padding: 28px 20px 20px; }
+.home-greeting { font-size: 26px; font-weight: 700; color: #1a1a1a; }
+.home-date { font-size: 14px; color: #aaa; margin-top: 4px; text-transform: capitalize; }
+
+.home-card { background: #fff; border: 1px solid #f0f0f0; border-radius: 16px; padding: 18px; margin: 0 16px 14px; }
+.home-card-main { background: #f9f9f9; }
+.home-card-row { display: flex; justify-content: space-between; align-items: flex-end; }
+.home-card-label { font-size: 12px; color: #aaa; margin-bottom: 4px; }
+.home-card-big { font-size: 22px; font-weight: 700; }
+.home-card-sub { font-size: 12px; color: #aaa; }
+.home-progress-bg { height: 6px; background: #e8e8e8; border-radius: 3px; margin-top: 14px; overflow: hidden; }
+.home-progress-fill { height: 100%; background: #3B6D11; border-radius: 3px; transition: width 0.4s; }
+
+.home-stats-row { display: flex; gap: 10px; padding: 0 16px; margin-bottom: 20px; }
+.home-stat-box { flex: 1; background: #f9f9f9; border-radius: 14px; padding: 14px 10px; text-align: center; cursor: pointer; }
+.home-stat-box:active { background: #f0f0f0; }
+.home-stat-num { font-size: 22px; font-weight: 700; }
+.home-stat-label { font-size: 12px; color: #888; margin-top: 2px; }
+.home-stat-sub { font-size: 11px; color: #aaa; margin-top: 2px; }
+
+.home-section-title { font-size: 13px; font-weight: 600; color: #888; padding: 8px 20px 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+.home-upcoming-item { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid #f5f5f5; cursor: pointer; }
+.home-upcoming-item:active { background: #fafafa; }
+
+.home-actions { display: flex; gap: 10px; padding: 0 16px 20px; }
+.home-action-btn { flex: 1; padding: 14px; background: #fff; border: 1px solid #e8e8e8; border-radius: 14px; text-align: center; font-size: 14px; font-weight: 500; color: #D4537E; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.home-action-btn:active { background: #FBEAF0; border-color: #D4537E; }
 
 /* ─── CHARGE CARDS ─── */
 .day-header { padding: 18px 16px 8px; }

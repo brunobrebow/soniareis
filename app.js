@@ -34,7 +34,7 @@ const COLORS = ['#F4C0D1','#B5D4F4','#9FE1CB','#FAC775','#F5C4B3','#C0DD97'];
 const TEXT_COLORS = ['#72243E','#0C447C','#085041','#633806','#993C1D','#3B6D11'];
 
 let state = {
-  tab: 'contatos',
+  tab: 'home',
   contacts: [],
   sales: [],
   payments: [],
@@ -402,7 +402,8 @@ function render() {
   }
 
   let html = '';
-  if (state.tab === 'contatos') html = renderContatos();
+  if (state.tab === 'home') html = renderHome();
+  else if (state.tab === 'contatos') html = renderContatos();
   else if (state.tab === 'cobrancas') html = renderCobrancas();
   else html = renderFinanceiro();
 
@@ -415,9 +416,10 @@ function render() {
 
 function renderNav() {
   const tabs = [
-    { id: 'contatos', icon: '👥', label: 'Contatos' },
-    { id: 'cobrancas', icon: '💰', label: 'Cobranças' },
-    { id: 'financeiro', icon: '📊', label: 'Financeiro' }
+    { id: 'home', svg: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>' },
+    { id: 'contatos', svg: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>' },
+    { id: 'cobrancas', svg: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>' },
+    { id: 'financeiro', svg: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>' }
   ];
 
   const nav = document.getElementById('bottomnav');
@@ -429,8 +431,7 @@ function renderNav() {
       nav.style.display = 'flex';
       nav.innerHTML = tabs.map(t => `
       <div class="nav-item ${state.tab === t.id ? 'active' : ''}" onclick="switchTab('${t.id}')">
-        <span class="nav-icon">${t.icon}</span>
-        <span class="nav-label">${t.label}</span>
+        <span class="nav-icon">${t.svg}</span>
       </div>`).join('');
     }
   }
@@ -438,6 +439,110 @@ function renderNav() {
 }
 
 // ---------- SCREENS ----------
+
+function renderHome() {
+  const today = new Date();
+  const diasSemana = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
+  const meses = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  const diaSemana = diasSemana[today.getDay()];
+  const diaNum = today.getDate();
+  const mes = meses[today.getMonth()];
+
+  // Stats
+  const totalVendido = state.sales.reduce((a, s) => a + s.total, 0);
+  const totalRecebido = state.payments.filter(p => p.paid).reduce((a, p) => {
+    const sale = state.sales.find(s => s.id === p.sale_id);
+    return a + (p.paid_amount || sale?.parcel_value || 0);
+  }, 0);
+  const totalPendente = state.payments.filter(p => !p.paid).reduce((a, p) => {
+    const sale = state.sales.find(s => s.id === p.sale_id);
+    return a + (sale ? sale.parcel_value - (p.paid_amount || 0) : 0);
+  }, 0);
+  const lateCharges = getDueCharges('atrasado');
+  const todayCharges = getDueCharges('hoje');
+  const atrasadoTotal = lateCharges.reduce((a, c) => a + c.parcel.amount, 0);
+  const clientesAtivas = state.contacts.filter(c => {
+    return state.sales.some(s => s.contact_id === c.id && getSaleParcels(s).some(p => !p.paid));
+  }).length;
+
+  // Upcoming 3 charges
+  const proximas = getDueCharges('mes').filter(c => !c.isPast).slice(0, 3);
+
+  return `
+    <div class="screen-scroll-list" style="padding-bottom:90px">
+      <div class="home-header">
+        <div class="home-greeting">Olá, Sônia</div>
+        <div class="home-date">${diaSemana}, ${diaNum} de ${mes}</div>
+      </div>
+
+      <div class="home-card home-card-main">
+        <div class="home-card-row">
+          <div>
+            <div class="home-card-label">Total vendido</div>
+            <div class="home-card-big" style="color:#1a1a1a">R$ ${totalVendido.toLocaleString('pt-BR')}</div>
+          </div>
+          <div style="text-align:right">
+            <div class="home-card-label">Recebido</div>
+            <div class="home-card-big" style="color:#3B6D11">R$ ${totalRecebido.toLocaleString('pt-BR')}</div>
+          </div>
+        </div>
+        <div class="home-progress-bg">
+          <div class="home-progress-fill" style="width:${totalVendido > 0 ? Math.round(totalRecebido / totalVendido * 100) : 0}%"></div>
+        </div>
+        <div class="home-card-row" style="margin-top:4px">
+          <span class="home-card-sub">${totalVendido > 0 ? Math.round(totalRecebido / totalVendido * 100) : 0}% recebido</span>
+          <span class="home-card-sub">Falta R$ ${totalPendente.toLocaleString('pt-BR')}</span>
+        </div>
+      </div>
+
+      <div class="home-stats-row">
+        <div class="home-stat-box" onclick="switchTab('cobrancas')">
+          <div class="home-stat-num" style="color:#A32D2D">${lateCharges.length}</div>
+          <div class="home-stat-label">Atrasadas</div>
+          ${atrasadoTotal > 0 ? `<div class="home-stat-sub">R$ ${atrasadoTotal.toLocaleString('pt-BR')}</div>` : ''}
+        </div>
+        <div class="home-stat-box" onclick="switchTab('cobrancas')">
+          <div class="home-stat-num" style="color:#D4537E">${todayCharges.length}</div>
+          <div class="home-stat-label">Vencem hoje</div>
+        </div>
+        <div class="home-stat-box" onclick="switchTab('contatos')">
+          <div class="home-stat-num" style="color:#1a1a1a">${state.contacts.length}</div>
+          <div class="home-stat-label">Clientes</div>
+          <div class="home-stat-sub">${clientesAtivas} ativas</div>
+        </div>
+      </div>
+
+      ${proximas.length > 0 ? `
+        <div class="home-section-title">Próximas cobranças</div>
+        ${proximas.map(({ sale, parcel, contact, isToday }) => {
+          if (!contact) return '';
+          const ci = getColorIndex(contact.id);
+          return `
+            <div class="home-upcoming-item" onclick="switchTab('cobrancas')">
+              <div class="avatar" style="width:36px;height:36px;font-size:12px;background:${COLORS[ci]};color:${TEXT_COLORS[ci]}">${getInitials(contact.name)}</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:14px;font-weight:500;color:#1a1a1a">${contact.name.split(' ').slice(0, 2).join(' ')}</div>
+                <div style="font-size:12px;color:#aaa">${sale.description}</div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:15px;font-weight:600;color:#1a1a1a">R$ ${parcel.amount}</div>
+                <div style="font-size:11px;color:${isToday ? '#D4537E' : '#aaa'}">${isToday ? 'Hoje' : parcel.dateStr}</div>
+              </div>
+            </div>`;
+        }).join('')}
+      ` : ''}
+
+      <div class="home-section-title">Ações rápidas</div>
+      <div class="home-actions">
+        <div class="home-action-btn" onclick="switchTab('contatos');setTimeout(()=>openModal('addContact'),100)">
+          <span>＋</span> Nova cliente
+        </div>
+        <div class="home-action-btn" onclick="switchTab('cobrancas');setTimeout(()=>openModal('addSale'),100)">
+          <span>＋</span> Nova venda
+        </div>
+      </div>
+    </div>`;
+}
 
 function renderContatos() {
   const filtered = state.contacts.filter(c =>
