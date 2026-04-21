@@ -869,11 +869,16 @@ function renderHome() {
 
       <div class="home-section-title">Ações rápidas</div>
       <div class="home-actions">
-        <div class="home-action-btn" onclick="switchTab('contatos');setTimeout(()=>openModal('addContact'),100)">
-          <span>＋</span> Nova cliente
+        <div class="home-action-btn" onclick="state.modal='vendasDia';render()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Vendas do dia
         </div>
         <div class="home-action-btn" onclick="enterPDV()">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> Modo Venda
+        </div>
+      </div>
+      <div class="home-actions" style="padding-top:0">
+        <div class="home-action-btn" onclick="switchTab('contatos');setTimeout(()=>openModal('addContact'),100)">
+          <span>＋</span> Nova cliente
         </div>
       </div>
     </div>`;
@@ -1267,6 +1272,40 @@ function renderModal() {
         </div>
         <button class="btn-danger" onclick="confirmDeleteContact()">Excluir permanentemente</button>
         <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+      </div>
+    </div>`;
+  }
+
+  if (state.modal === 'vendasDia') {
+    const today = new Date();
+    const vendasHoje = state.sales.filter(s => {
+      const d = new Date(s.created_at);
+      return d.getDate() === today.getDate() && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
+    });
+    const totalHoje = vendasHoje.reduce((a, s) => a + s.total, 0);
+    return `<div class="modal-overlay" onclick="closeModal()">
+      <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:85vh">
+        <div class="modal-title">Vendas do dia</div>
+        <div class="modal-subtitle">${vendasHoje.length} venda${vendasHoje.length !== 1 ? 's' : ''} · Total: R$ ${totalHoje.toLocaleString('pt-BR')}</div>
+        ${vendasHoje.length === 0 ? '<div style="text-align:center;color:#aaa;padding:24px 0;font-size:14px">Nenhuma venda registrada hoje.</div>' : `
+          <div style="margin-top:8px">
+            ${vendasHoje.map(s => {
+              const contact = getContact(s.contact_id);
+              return `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #f5f5f5">
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:15px;font-weight:500;color:#1a1a1a">${s.description}</div>
+                  <div style="font-size:13px;color:#888;margin-top:2px">${contact?.name || '—'} · ${s.parcels}x R$ ${s.parcel_value} · ${s.payment_method === 'pix' ? 'Pix' : 'Cartão'}${s.category ? ' · ' + (s.category === 'joia' ? 'Jóia' : 'Mary Kay') : ''}</div>
+                </div>
+                <div style="font-size:16px;font-weight:600;color:#1a1a1a;margin-left:12px">R$ ${s.total.toLocaleString('pt-BR')}</div>
+              </div>`;
+            }).join('')}
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:16px 0 4px;font-size:16px;font-weight:600;color:#1a1a1a;border-top:2px solid #1a1a1a;margin-top:4px">
+            <span>Total</span>
+            <span>R$ ${totalHoje.toLocaleString('pt-BR')}</span>
+          </div>
+        `}
+        <button class="btn-cancel" onclick="closeModal()">Fechar</button>
       </div>
     </div>`;
   }
