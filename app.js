@@ -730,12 +730,19 @@ function renderNav() {
 // ---------- SCREENS ----------
 
 function setMeta() {
-  const val = prompt('Defina sua meta mensal de vendas (R$):');
-  const num = parseFloat(val);
-  if (num && num > 0) {
-    state.metaMensal = num;
-    localStorage.setItem('srcrm_meta', String(num));
-    render();
+  state.modal = 'setMeta';
+  render();
+}
+
+function confirmMeta() {
+  const val = parseFloat(document.getElementById('meta-value')?.value);
+  if (val && val > 0) {
+    state.metaMensal = val;
+    localStorage.setItem('srcrm_meta', String(val));
+    closeModal();
+    showToast('Meta redefinida!');
+  } else {
+    showToast('Insira um valor válido', '#A32D2D');
   }
 }
 
@@ -796,7 +803,7 @@ function renderHome() {
         </div>
         <div class="home-card-row" style="margin-top:4px">
           <span class="home-card-sub">${Math.round(vendasMes / state.metaMensal * 100)}% da meta</span>
-          <span class="home-card-sub home-meta-link" onclick="setMeta()">Alterar meta</span>
+          <span class="home-card-sub home-meta-link" onclick="setMeta()">Redefinir meta</span>
         </div>
       </div>
 
@@ -1235,6 +1242,21 @@ function renderModal() {
           ${salesCount > 0 ? `<br><br>⚠️ Isso também vai excluir ${salesCount} venda(s) e todas as parcelas. Não pode ser desfeito.` : '<br><br>Esta ação não pode ser desfeita.'}
         </div>
         <button class="btn-danger" onclick="confirmDeleteContact()">Excluir permanentemente</button>
+        <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+      </div>
+    </div>`;
+  }
+
+  if (state.modal === 'setMeta') {
+    return `<div class="modal-overlay" onclick="closeModal()">
+      <div class="modal-sheet" onclick="event.stopPropagation()">
+        <div class="modal-title">Redefinir meta mensal</div>
+        <div class="modal-subtitle">Quanto você quer vender por mês?</div>
+        <div class="form-group">
+          <label class="form-label">Valor da meta (R$)</label>
+          <input class="form-input" id="meta-value" type="number" inputmode="decimal" placeholder="Ex: 20000" value="${state.metaMensal || ''}" />
+        </div>
+        <button class="btn-primary" onclick="confirmMeta()">Confirmar</button>
         <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
       </div>
     </div>`;
