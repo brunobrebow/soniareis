@@ -808,11 +808,6 @@ function renderHome() {
       </div>
 
       <div class="home-stats-row">
-        <div class="home-stat-box" onclick="switchTab('cobrancas')">
-          <div class="home-stat-num" style="color:#A32D2D">${lateCharges.length}</div>
-          <div class="home-stat-label">Atrasadas</div>
-          ${atrasadoTotal > 0 ? `<div class="home-stat-sub">R$ ${atrasadoTotal.toLocaleString('pt-BR')}</div>` : ''}
-        </div>
         <div class="home-stat-box">
           <div class="home-stat-num" style="color:#3B6D11">R$ ${totalRecebido.toLocaleString('pt-BR')}</div>
           <div class="home-stat-label">Recebido</div>
@@ -820,6 +815,11 @@ function renderHome() {
         <div class="home-stat-box">
           <div class="home-stat-num" style="color:#993556">R$ ${totalPendente.toLocaleString('pt-BR')}</div>
           <div class="home-stat-label">A receber</div>
+        </div>
+        <div class="home-stat-box" onclick="switchTab('cobrancas')">
+          <div class="home-stat-num" style="color:#A32D2D">R$ ${atrasadoTotal.toLocaleString('pt-BR')}</div>
+          <div class="home-stat-label">Atrasadas</div>
+          <div class="home-stat-sub">${lateCharges.length} cobrança${lateCharges.length !== 1 ? 's' : ''}</div>
         </div>
       </div>
 
