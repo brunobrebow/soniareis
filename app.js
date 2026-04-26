@@ -463,7 +463,11 @@ function pdvDetailsBack() {
 }
 
 function pdvCartTotal() {
-  return state.pdvCart.reduce((a, item) => a + (item.value * (item.qty || 1)), 0);
+  return state.pdvCart.reduce((a, item) => {
+    const itemTotal = item.value * (item.qty || 1);
+    const disc = (item.discount || 0) * (item.qty || 1);
+    return a + Math.max(0, itemTotal - disc);
+  }, 0);
 }
 
 function pdvOpenDiscount(i) {
@@ -481,10 +485,7 @@ function pdvApplyDiscount() {
   const i = state._pdvDiscountIdx;
   const val = parseFloat(document.getElementById('pdv-disc-amount')?.value) || 0;
   if (val <= 0) { showToast('Insira o valor do desconto', '#A32D2D'); return; }
-  const original = state.pdvCart[i]._originalValue || state.pdvCart[i].value;
-  state.pdvCart[i]._originalValue = original;
-  state.pdvCart[i].discount = { type: 'value', val };
-  state.pdvCart[i].value = Math.max(0, original - val);
+  state.pdvCart[i].discount = val;
   state.modal = null;
   render();
 }
@@ -572,22 +573,26 @@ async function pdvSubmit() {
 
   const contact = getContact(contactId);
   const items = [];
-  const subtotal = pdvCartTotal();
-  const total = Math.max(0, subtotal - totalDiscount);
+  // Calculate with per-item discounts already applied
+  const subtotalAfterItemDiscounts = pdvCartTotal();
+  const total = Math.max(0, subtotalAfterItemDiscounts - totalDiscount);
+  const subtotalBeforeDiscounts = state.pdvCart.reduce((a, item) => a + item.value * (item.qty || 1), 0);
 
   try {
     for (const item of state.pdvCart) {
-      const itemSubtotal = item.value * (item.qty || 1);
-      // Apply discount proportionally
-      const itemDiscount = subtotal > 0 ? Math.round(totalDiscount * (itemSubtotal / subtotal)) : 0;
-      const itemTotal = Math.max(0, itemSubtotal - itemDiscount);
+      const itemGross = item.value * (item.qty || 1);
+      const itemPerDiscount = (item.discount || 0) * (item.qty || 1);
+      const itemAfterPerDiscount = Math.max(0, itemGross - itemPerDiscount);
+      // Apply total discount proportionally
+      const itemTotalDiscount = subtotalAfterItemDiscounts > 0 ? Math.round(totalDiscount * (itemAfterPerDiscount / subtotalAfterItemDiscounts)) : 0;
+      const itemFinal = Math.max(0, itemAfterPerDiscount - itemTotalDiscount);
       const descWithQty = (item.qty || 1) > 1 ? `${item.qty}x ${item.description}` : item.description;
       const newSale = await DB.addSale({
         contact_id: contactId,
         description: descWithQty,
-        total: itemTotal,
+        total: itemFinal,
         parcels,
-        parcel_value: Math.round(itemTotal / parcels),
+        parcel_value: Math.round(itemFinal / parcels),
         start_day: day,
         payment_method: method,
         category: item.category
@@ -595,7 +600,7 @@ async function pdvSubmit() {
       state.sales.push(newSale);
       const newPayments = await DB.initPayments(newSale.id, parcels);
       state.payments.push(...newPayments);
-      items.push({ ...item, total: itemTotal, parcel_value: Math.round(itemTotal / parcels) });
+      items.push({ ...item, total: itemFinal, originalTotal: itemGross, itemDiscount: itemPerDiscount, parcel_value: Math.round(itemFinal / parcels) });
     }
 
     state.pdvResult = { items, contact, parcels, day, method, total, discount: totalDiscount, isAberto };
@@ -738,9 +743,9 @@ function renderPDV() {
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
               <button class="pdv-discount-btn" onclick="pdvOpenDiscount(${i})">🏷️ Desconto</button>
-              ${item.discount ? `<span style="font-size:12px;color:#3B6D11">R$ ${item.discount.val} de desconto</span>` : ''}
+              ${item.discount ? `<span style="font-size:12px;color:#3B6D11">- R$ ${item.discount} de desconto</span>` : ''}
             </div>
-            ${(item.qty || 1) > 1 ? `<div style="font-size:12px;color:#aaa;margin-top:6px;text-align:right">Subtotal: R$ ${(item.value * (item.qty || 1)).toLocaleString('pt-BR')}</div>` : ''}
+            ${(item.qty || 1) > 1 || item.discount ? `<div style="font-size:12px;color:#aaa;margin-top:6px;text-align:right">${(item.qty || 1) > 1 ? `${item.qty}x R$ ${item.value} = R$ ${(item.value * (item.qty || 1)).toLocaleString('pt-BR')}` : ''}${item.discount ? ` → desconto - R$ ${(item.discount * (item.qty || 1)).toLocaleString('pt-BR')} = <span style="color:#3B6D11;font-weight:600">R$ ${Math.max(0, item.value * (item.qty || 1) - item.discount * (item.qty || 1)).toLocaleString('pt-BR')}</span>` : ''}</div>` : ''}
           </div>`).join('')}
         <div class="pdv-detail-total">Total: R$ ${pdvCartTotal().toLocaleString('pt-BR')}</div>
       </div>
@@ -859,17 +864,21 @@ function renderPDV() {
           </div>
           <div class="pdv-receipt-divider"></div>
           <div class="pdv-receipt-row"><span>Cliente</span><span>${r.contact.name}</span></div>
-          ${r.discount > 0 ? `<div class="pdv-receipt-row"><span>Desconto</span><span style="color:#3B6D11">- R$ ${r.discount.toLocaleString('pt-BR')}</span></div>` : ''}
-          <div class="pdv-receipt-row"><span>Total</span><span>R$ ${r.total.toLocaleString('pt-BR')}</span></div>
           <div class="pdv-receipt-row"><span>Pagamento</span><span>${r.method === 'pix' ? 'Pix' : 'Cartão'}</span></div>
           <div class="pdv-receipt-divider"></div>
           ${r.items.map(item => `
             <div class="pdv-receipt-item">
               <span>${(item.qty||1) > 1 ? item.qty + 'x ' : ''}${item.description}</span>
               <span class="pdv-receipt-cat">${item.category === 'joia' ? 'Jóia' : 'Mary Kay'}</span>
-              <span>R$ ${(item.value * (item.qty||1)).toLocaleString('pt-BR')}</span>
+              <span>R$ ${item.value.toLocaleString('pt-BR')}</span>
             </div>
+            ${item.itemDiscount > 0 ? `<div style="font-size:11px;color:#3B6D11;text-align:right;padding:0 0 4px">desconto - R$ ${item.itemDiscount.toLocaleString('pt-BR')}</div>` : ''}
           `).join('')}
+          <div class="pdv-receipt-divider"></div>
+          <div class="pdv-receipt-row"><span>Subtotal</span><span>R$ ${r.items.reduce((a,i) => a + i.value * (i.qty||1), 0).toLocaleString('pt-BR')}</span></div>
+          ${r.items.some(i => i.itemDiscount > 0) ? `<div class="pdv-receipt-row"><span>Desc. produtos</span><span style="color:#3B6D11">- R$ ${r.items.reduce((a,i) => a + (i.itemDiscount||0), 0).toLocaleString('pt-BR')}</span></div>` : ''}
+          ${r.discount > 0 ? `<div class="pdv-receipt-row"><span>Desc. venda</span><span style="color:#3B6D11">- R$ ${r.discount.toLocaleString('pt-BR')}</span></div>` : ''}
+          <div class="pdv-receipt-row" style="font-weight:700;font-size:16px"><span>Total</span><span>R$ ${r.total.toLocaleString('pt-BR')}</span></div>
         </div>
       </div>
       <div class="pdv-bottom" style="display:flex;flex-direction:column;gap:8px">
