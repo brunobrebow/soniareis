@@ -42,7 +42,7 @@ let state = {
   detail: null,
   modal: null,
   modalExtra: null,
-  chargeFilter: 'mes',
+  chargeFilter: 'pendente',
   financeDetail: 'recebido',
   financePeriod: 'mes',
   financeCustomMonth: null,
@@ -58,6 +58,33 @@ let state = {
   pdvResult: null,
   metaMensal: parseFloat(localStorage.getItem('srcrm_meta') || '20000')
 };
+
+// ── CHARGE TRACKING ──
+function getCobradas() {
+  try { return JSON.parse(localStorage.getItem('srcrm_cobradas') || '{}'); } catch { return {}; }
+}
+function markCobrada(saleId, parcelIndex) {
+  const cobradas = getCobradas();
+  cobradas[`${saleId}-${parcelIndex}`] = Date.now();
+  localStorage.setItem('srcrm_cobradas', JSON.stringify(cobradas));
+}
+function isCobrada(saleId, parcelIndex) {
+  const cobradas = getCobradas();
+  const ts = cobradas[`${saleId}-${parcelIndex}`];
+  if (!ts) return false;
+  const twoDays = 2 * 24 * 60 * 60 * 1000;
+  if (Date.now() - ts > twoDays) {
+    delete cobradas[`${saleId}-${parcelIndex}`];
+    localStorage.setItem('srcrm_cobradas', JSON.stringify(cobradas));
+    return false;
+  }
+  return true;
+}
+function openWppAndMark(url, saleId, parcelIndex) {
+  markCobrada(saleId, parcelIndex);
+  window.open(url, '_blank');
+  render();
+}
 
 // ---------- LOGIN ----------
 
@@ -1425,6 +1452,24 @@ function renderHome() {
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> Modo Venda
         </button>
       </div>
+
+      ${(() => {
+        const dueToday = getDueCharges('mes').filter(c => (c.isPast || c.isToday) && !isCobrada(c.sale.id, c.parcel.index));
+        const count = dueToday.length;
+        if (count > 0) {
+          return `<div class="home-charges-alert" onclick="state.chargeFilter='pendente';switchTab('cobrancas')">
+            <div class="home-charges-num">${count}</div>
+            <div class="home-charges-label">cobrança${count !== 1 ? 's' : ''} pendente${count !== 1 ? 's' : ''}</div>
+            <button class="home-charges-btn">Ver cobranças</button>
+          </div>`;
+        } else {
+          return `<div class="home-charges-empty">
+            <div class="home-charges-num-empty">0</div>
+            <div class="home-charges-label-empty">cobranças pendentes</div>
+          </div>`;
+        }
+      })()}
+
     </div>`;
 }
 
@@ -1473,20 +1518,21 @@ function renderContatos() {
 }
 
 function renderCobrancas() {
-  const allCharges = getDueCharges('mes');
-  const lateCharges = allCharges.filter(c => c.isPast);
-  const lateCount = lateCharges.length;
-  const todayCount = allCharges.filter(c => c.isToday).length;
+  const today = new Date();
+  const diasSemana = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
 
-  const filters = [{ id: 'mes', label: 'Este mês' }, { id: 'atrasado', label: 'Atrasado' }, { id: 'hoje', label: 'Hoje' }];
+  // Get today + overdue charges (not future)
+  const allDueCharges = getDueCharges('mes');
+  const todayAndLate = allDueCharges.filter(c => c.isPast || c.isToday);
 
-  let charges;
-  if (state.chargeFilter === 'atrasado') charges = lateCharges;
-  else if (state.chargeFilter === 'hoje') charges = allCharges.filter(c => c.isToday);
-  else charges = allCharges;
+  // Split into pendente vs realizada
+  const pendentes = todayAndLate.filter(c => !isCobrada(c.sale.id, c.parcel.index));
+  const realizadas = todayAndLate.filter(c => isCobrada(c.sale.id, c.parcel.index));
+
+  const filter = state.chargeFilter || 'pendente';
+  const charges = filter === 'pendente' ? pendentes : realizadas;
 
   // Group by day
-  const diasSemana = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
   const groups = [];
   let currentKey = null;
   let currentGroup = null;
@@ -1498,19 +1544,15 @@ function renderCobrancas() {
   });
 
   sorted.forEach(charge => {
+    const d = charge.parcel.date;
     let key, label, isPastGroup;
     if (charge.isPast) {
-      const d = charge.parcel.date;
       key = `late-${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-      const diaSemana = diasSemana[d.getDay()];
-      label = `${diaSemana}, ${d.getDate()} — Atrasado`;
+      label = `${diasSemana[d.getDay()]}, ${d.getDate()} — Atrasado`;
       isPastGroup = true;
     } else {
-      const d = charge.parcel.date;
-      key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-      const diaSemana = diasSemana[d.getDay()];
-      const diaNum = d.getDate();
-      label = charge.isToday ? `Hoje, ${diaSemana.toLowerCase()}, ${diaNum}` : `${diaSemana}, ${diaNum}`;
+      key = `today-${d.getDate()}`;
+      label = `Hoje, ${diasSemana[d.getDay()].toLowerCase()}, ${d.getDate()}`;
       isPastGroup = false;
     }
     if (key !== currentKey) {
@@ -1521,31 +1563,25 @@ function renderCobrancas() {
     currentGroup.items.push(charge);
   });
 
-  // Stats for current filter
-  const totalValue = charges.reduce((a, c) => a + c.parcel.remaining, 0);
-  const lateInView = charges.filter(c => c.isPast).length;
-  const todayInView = charges.filter(c => c.isToday).length;
-
   return `
     <div class="screen-fixed-header">
       <div class="topbar">
         <div class="topbar-row">
           <div><h2>Cobranças</h2></div>
-          <button class="add-btn" onclick="openModal('addSale')">+</button>
         </div>
       </div>
       <div class="filter-tabs">
-        ${filters.map(f => `<button class="filter-tab ${state.chargeFilter === f.id ? 'active' : ''}" onclick="setChargeFilter('${f.id}')">${f.label}</button>`).join('')}
+        <button class="filter-tab ${filter === 'pendente' ? 'active' : ''}" onclick="setChargeFilter('pendente')">Cobrança pendente (${pendentes.length})</button>
+        <button class="filter-tab ${filter === 'realizada' ? 'active' : ''}" onclick="setChargeFilter('realizada')">Cobrança realizada (${realizadas.length})</button>
       </div>
       <div class="charge-summary">
         <div class="charge-summary-item"><span class="charge-summary-num">${charges.length}</span><span class="charge-summary-label">cobranças</span></div>
-        <div class="charge-summary-item"><span class="charge-summary-num" style="color:#D4537E">${todayInView}</span><span class="charge-summary-label">hoje</span></div>
-        <div class="charge-summary-item"><span class="charge-summary-num" style="color:#A32D2D">${lateInView}</span><span class="charge-summary-label">atrasadas</span></div>
-        <div class="charge-summary-item"><span class="charge-summary-num" style="color:#993556">R$ ${totalValue.toLocaleString('pt-BR')}</span><span class="charge-summary-label">a receber</span></div>
+        <div class="charge-summary-item"><span class="charge-summary-num" style="color:#A32D2D">${charges.filter(c => c.isPast).length}</span><span class="charge-summary-label">atrasadas</span></div>
+        <div class="charge-summary-item"><span class="charge-summary-num" style="color:#993556">R$ ${charges.reduce((a, c) => a + c.parcel.remaining, 0).toLocaleString('pt-BR')}</span><span class="charge-summary-label">total</span></div>
       </div>
     </div>
     <div class="screen-scroll-list">
-      ${charges.length === 0 ? `<div class="empty-state">Nenhuma cobrança para este filtro 🎉</div>` : ''}
+      ${charges.length === 0 ? '<div class="empty-state">' + (filter === 'pendente' ? 'Nenhuma cobrança pendente 🎉' : 'Nenhuma cobrança realizada') + '</div>' : ''}
       ${groups.map(group => `
         <div class="day-header">
           <span class="day-header-text ${group.isPast ? 'day-header-late' : ''}">${group.label}</span>
@@ -1555,33 +1591,31 @@ function renderCobrancas() {
           if (!contact) return '';
           const ci = getColorIndex(contact.id);
           const msg = getWhatsappMsg(contact, parcel, sale);
-          const wppUrl = `https://wa.me/${contact.phone}?text=${encodeURIComponent(msg)}`;
-          return `
-            <div class="charge-item ${isPast ? 'charge-item-late' : ''}">
-              <div class="charge-header">
-                <div class="avatar" style="width:38px;height:38px;font-size:13px;background:${COLORS[ci]};color:${TEXT_COLORS[ci]}">${getInitials(contact.name)}</div>
-                <span class="charge-name">${contact.name.split(' ').slice(0, 2).join(' ')}</span>
-                ${isPast ? '<span class="badge badge-late">Atrasado</span>' : ''}
-              </div>
-              <div class="charge-body">
-                <div>
-                  <div class="charge-detail">${sale.description}</div>
-                  <div class="charge-detail" style="margin-top:2px">Parc. ${parcel.index + 1}/${sale.parcels}</div>
-                </div>
-                <div class="charge-amount">R$ ${parcel.remaining}${parcel.paidAmount > 0 ? `<div style="font-size:11px;color:#3B6D11;font-weight:400;margin-top:2px">pago: R$ ${parcel.paidAmount}</div>` : ''}</div>
-              </div>
-              <div class="charge-actions">
-                ${sale.payment_method === 'cartao' ? `
-                  <span class="charge-cartao-tag">💳 Cartão</span>
-                ` : `
-                  <button class="btn-cobrar" onclick="openWpp('${wppUrl}')">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.49a.75.75 0 00.914.914l4.456-1.495A11.952 11.952 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.34 0-4.508-.758-6.26-2.04l-.438-.33-3.222 1.08 1.08-3.222-.33-.438A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
-                    Cobrar
-                  </button>
-                `}
-                <button class="btn-pago" onclick="openPaidModal('${sale.id}',${parcel.index})">Registrar pgto</button>
-              </div>
-            </div>`;
+          const wppUrl = 'https://wa.me/' + contact.phone + '?text=' + encodeURIComponent(msg);
+          const isCard = sale.payment_method === 'cartao';
+          return '<div class="charge-item ' + (isPast ? 'charge-item-late' : '') + '">' +
+            '<div class="charge-header">' +
+              '<div class="avatar" style="width:38px;height:38px;font-size:13px;background:' + COLORS[ci] + ';color:' + TEXT_COLORS[ci] + '">' + getInitials(contact.name) + '</div>' +
+              '<span class="charge-name">' + contact.name.split(' ').slice(0, 2).join(' ') + '</span>' +
+              (isPast ? '<span class="badge badge-late">Atrasado</span>' : '') +
+            '</div>' +
+            '<div class="charge-body">' +
+              '<div>' +
+                '<div class="charge-detail">' + sale.description + '</div>' +
+                '<div class="charge-detail" style="margin-top:2px">Parc. ' + (parcel.index + 1) + '/' + sale.parcels + '</div>' +
+              '</div>' +
+              '<div class="charge-amount">R$ ' + parcel.remaining + '</div>' +
+            '</div>' +
+            '<div class="charge-actions">' +
+              (filter === 'realizada' ?
+                '<button class="btn-pago" style="flex:2" onclick="openDetail(\'' + contact.id + '\')">Ver contato</button>' :
+                (isCard ?
+                  '<span class="charge-cartao-tag">💳 Cartão</span>' :
+                  '<button class="btn-cobrar" onclick="openWppAndMark(\'' + wppUrl + '\',\'' + sale.id + '\',' + parcel.index + ')"><svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.49a.75.75 0 00.914.914l4.456-1.495A11.952 11.952 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.34 0-4.508-.758-6.26-2.04l-.438-.33-3.222 1.08 1.08-3.222-.33-.438A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg> Cobrar</button>')
+              ) +
+              '<button class="btn-pago" onclick="openPaidModal(\'' + sale.id + '\',' + parcel.index + ')">Registrar pgto</button>' +
+            '</div>' +
+          '</div>';
         }).join('')}
       `).join('')}
     </div>`;
@@ -1671,7 +1705,8 @@ function renderFinanceiro() {
         date: parcel.dateStr,
         value: parcel.remaining,
         color: '#993556',
-        prefix: ''
+        prefix: '',
+        sale, parcel, contact, actionable: true
       });
     });
   } else if (sel === 'atrasado') {
@@ -1683,7 +1718,8 @@ function renderFinanceiro() {
         date: parcel.dateStr,
         value: parcel.remaining,
         color: '#A32D2D',
-        prefix: ''
+        prefix: '',
+        sale, parcel, contact, actionable: true
       });
     });
   }
@@ -1718,18 +1754,31 @@ function renderFinanceiro() {
     <div class="screen-scroll-list">
       <div class="upcoming-list">
         ${transactions.length === 0 ? '<div class="empty-state" style="padding:20px">Nenhuma transação neste período.</div>' : ''}
-        ${transactions.map(t => `
-          <div class="fin-transaction">
-            <div class="fin-tx-left">
-              <div class="fin-tx-name">${t.name}</div>
-              <div class="fin-tx-desc">${t.desc}</div>
-            </div>
-            <div class="fin-tx-right">
-              <div class="fin-tx-value" style="color:${t.color}">${t.prefix}R$ ${t.value.toLocaleString('pt-BR')}</div>
-              <div class="fin-tx-date">${t.date}</div>
-            </div>
-          </div>
-        `).join('')}
+        ${transactions.map(t => {
+          let cobrarHtml = '';
+          if (t.actionable && t.contact && t.sale) {
+            const isCard = t.sale.payment_method === 'cartao';
+            if (!isCard) {
+              const msg = getWhatsappMsg(t.contact, t.parcel, t.sale);
+              const url = 'https://wa.me/' + t.contact.phone + '?text=' + encodeURIComponent(msg);
+              cobrarHtml = '<button class="fin-tx-cobrar" onclick="openWppAndMark(\'' + url + '\',\'' + t.sale.id + '\',' + t.parcel.index + ')">Cobrar</button>';
+            } else {
+              cobrarHtml = '<span style="font-size:11px;color:#aaa">💳</span>';
+            }
+          }
+          return `
+            <div class="fin-transaction">
+              <div class="fin-tx-left" ${t.contact ? 'onclick="state.modal=\'finDetail\';state.modalExtra=\'' + t.sale.id + '\';render()" style="cursor:pointer"' : ''}>
+                <div class="fin-tx-name">${t.name}</div>
+                <div class="fin-tx-desc">${t.desc}</div>
+              </div>
+              <div class="fin-tx-right">
+                <div class="fin-tx-value" style="color:${t.color}">${t.prefix}R$ ${t.value.toLocaleString('pt-BR')}</div>
+                <div class="fin-tx-date">${t.date}</div>
+                ${cobrarHtml}
+              </div>
+            </div>`;
+        }).join('')}
       </div>
     </div>`;
 }
@@ -1956,6 +2005,37 @@ function renderModal() {
         <button class="btn-cancel" onclick="closeModal()">Fechar</button>
       </div>
     </div>`;
+  }
+
+  if (state.modal === 'finDetail' && state.modalExtra) {
+    const sale = state.sales.find(s => s.id === state.modalExtra);
+    if (sale) {
+      const contact = getContact(sale.contact_id);
+      const parcels = getSaleParcels(sale);
+      const dataCompra = new Date(sale.created_at);
+      const mesesAbr = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+      return `<div class="modal-overlay" onclick="closeModal()">
+        <div class="modal-sheet" onclick="event.stopPropagation()">
+          <div class="modal-title">${contact?.name || '—'}</div>
+          <div class="modal-subtitle">${sale.description} · ${sale.category === 'joia' ? 'Jóia' : sale.category === 'marykay' ? 'Mary Kay' : ''}</div>
+          <div style="margin:12px 0;font-size:14px;color:#666">
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0"><span>Data da compra</span><span style="color:#1a1a1a">${dataCompra.getDate()}/${mesesAbr[dataCompra.getMonth()]}/${dataCompra.getFullYear()}</span></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0"><span>Total</span><span style="color:#1a1a1a;font-weight:600">R$ ${sale.total}</span></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0"><span>Parcelas</span><span style="color:#1a1a1a">${sale.parcels}x de R$ ${sale.parcel_value}</span></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0"><span>Vencimento</span><span style="color:#1a1a1a">Todo dia ${sale.start_day}</span></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0"><span>Pagamento</span><span style="color:#1a1a1a">${sale.payment_method === 'pix' ? 'Pix' : 'Cartão'}</span></div>
+          </div>
+          <div style="margin:8px 0;font-size:13px">
+            ${parcels.map(p => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f5f5f5">
+              <span>Parc. ${p.index+1}</span>
+              <span>${p.dateStr}</span>
+              <span class="badge ${p.paid ? 'badge-ok' : 'badge-due'}">${p.paid ? 'Pago' : 'R$ ' + p.remaining}</span>
+            </div>`).join('')}
+          </div>
+          <button class="btn-cancel" onclick="closeModal()">Fechar</button>
+        </div>
+      </div>`;
+    }
   }
 
   if (state.modal === 'financePeriod') {
