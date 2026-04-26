@@ -381,6 +381,7 @@ function enterPDV() {
   state.pdvResult = null;
   state.modal = null;
   state._pdvCatChoice = null;
+  state._pdvSelectedContact = null;
   document.querySelector('meta[name="theme-color"]').content = '#111111';
   render();
 }
@@ -464,6 +465,35 @@ function pdvCartTotal() {
   return state.pdvCart.reduce((a, item) => a + (item.value * (item.qty || 1)), 0);
 }
 
+function pdvOpenDiscount(i) {
+  // Save current values first
+  for (let j = 0; j < state.pdvCart.length; j++) {
+    const valInput = document.getElementById('pdv-val-' + j);
+    if (valInput) state.pdvCart[j].value = parseFloat(valInput.value) || 0;
+  }
+  state._pdvDiscountIdx = i;
+  state.modal = 'pdvDiscount';
+  render();
+}
+
+function pdvApplyDiscount() {
+  const i = state._pdvDiscountIdx;
+  const type = document.querySelector('input[name="pdv-disc-type"]:checked')?.value;
+  const val = parseFloat(document.getElementById('pdv-disc-amount')?.value) || 0;
+  if (!type || val <= 0) { showToast('Insira o valor do desconto', '#A32D2D'); return; }
+  const original = state.pdvCart[i]._originalValue || state.pdvCart[i].value;
+  state.pdvCart[i]._originalValue = original;
+  if (type === 'percent') {
+    state.pdvCart[i].discount = { type: 'percent', val };
+    state.pdvCart[i].value = Math.round(original * (1 - val / 100));
+  } else {
+    state.pdvCart[i].discount = { type: 'value', val };
+    state.pdvCart[i].value = Math.max(0, original - val);
+  }
+  state.modal = null;
+  render();
+}
+
 function pdvGoPayment() {
   // Read edited values
   for (let i = 0; i < state.pdvCart.length; i++) {
@@ -510,7 +540,8 @@ function pdvUpdatePhone() {
 
 function pdvOpenEditContact() {
   const sel = document.getElementById('pdv-contact');
-  if (sel) state._pdvEditId = sel.value;
+  if (sel && sel.value) state._pdvEditId = sel.value;
+  else if (state._pdvSelectedContact) state._pdvEditId = state._pdvSelectedContact;
   state.modal = 'pdvEditContact';
   render();
 }
@@ -534,10 +565,11 @@ async function pdvSaveEditContact() {
 
 async function pdvSubmit() {
   const contactId = document.getElementById('pdv-contact')?.value;
-  const parcels = parseInt(document.getElementById('pdv-parcels')?.value) || 1;
+  const parcels = parseInt(document.getElementById('pdv-parcels')?.value);
   const day = parseInt(document.getElementById('pdv-day')?.value) || 28;
   const method = document.querySelector('input[name="pdv-method"]:checked')?.value || 'pix';
   if (!contactId) { showToast('Selecione a cliente', '#A32D2D'); return; }
+  if (!parcels) { showToast('Selecione o número de parcelas', '#A32D2D'); return; }
 
   const contact = getContact(contactId);
   const items = [];
@@ -699,6 +731,10 @@ function renderPDV() {
               <label class="pdv-form-label">Valor unitário</label>
               <input class="form-input" id="pdv-val-${i}" type="number" inputmode="decimal" value="${item.value || ''}" placeholder="R$" />
             </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+              <button class="pdv-discount-btn" onclick="pdvOpenDiscount(${i})">🏷️ Desconto</button>
+              ${item.discount ? `<span style="font-size:12px;color:#3B6D11">${item.discount.type === 'percent' ? item.discount.val + '%' : 'R$ ' + item.discount.val} de desconto</span>` : ''}
+            </div>
             ${(item.qty || 1) > 1 ? `<div style="font-size:12px;color:#aaa;margin-top:6px;text-align:right">Subtotal: R$ ${(item.value * (item.qty || 1)).toLocaleString('pt-BR')}</div>` : ''}
           </div>`).join('')}
         <div class="pdv-detail-total">Total: R$ ${pdvCartTotal().toLocaleString('pt-BR')}</div>
@@ -706,31 +742,54 @@ function renderPDV() {
       <div class="pdv-bottom">
         <button class="pdv-btn-next" onclick="pdvGoPayment()">Continuar →</button>
       </div>
+      ${state.modal === 'pdvDiscount' ? `
+        <div class="modal-overlay" onclick="state.modal=null;render()">
+          <div class="modal-sheet" onclick="event.stopPropagation()">
+            <div class="modal-title">Desconto — ${state.pdvCart[state._pdvDiscountIdx]?.description}</div>
+            <div class="form-group">
+              <label class="form-label">Tipo de desconto</label>
+              <div class="pdv-toggle-row" style="margin-bottom:12px">
+                <input type="radio" name="pdv-disc-type" id="pdv-disc-pct" value="percent" checked class="pdv-toggle-input" />
+                <label for="pdv-disc-pct" class="pdv-toggle-btn">%</label>
+                <input type="radio" name="pdv-disc-type" id="pdv-disc-val" value="value" class="pdv-toggle-input" />
+                <label for="pdv-disc-val" class="pdv-toggle-btn">R$</label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Valor do desconto</label>
+              <input class="form-input" id="pdv-disc-amount" type="number" inputmode="decimal" placeholder="Ex: 10" />
+            </div>
+            <button class="btn-primary" onclick="pdvApplyDiscount()">Aplicar desconto</button>
+            <button class="btn-cancel" onclick="state.modal=null;render()">Cancelar</button>
+          </div>
+        </div>` : ''}
     </div>`;
   }
 
   // ── STEP: PAYMENT ──
   if (state.pdvStep === 'payment') {
-    const selId = state._pdvEditId || state.contacts[0]?.id;
-    const opts = state.contacts.map(c => `<option value="${c.id}" ${c.id === selId ? 'selected' : ''}>${c.name}</option>`).join('');
+    const selId = state._pdvSelectedContact || '';
+    const opts = `<option value="" disabled ${!selId ? 'selected' : ''}>Selecione a cliente</option>` + state.contacts.map(c => `<option value="${c.id}" ${c.id === selId ? 'selected' : ''}>${c.name}</option>`).join('');
+    const selContact = selId ? state.contacts.find(c => c.id === selId) : null;
     return `<div class="pdv-overlay">
       ${topbar('pdvPaymentBack()', 'Pagamento')}
       <div class="pdv-form">
         <div class="pdv-value-display">R$ ${pdvCartTotal().toLocaleString('pt-BR')}</div>
         <div class="pdv-form-group">
-          <label class="pdv-form-label">Cliente</label>
-          <select class="form-input" id="pdv-contact" onchange="pdvUpdatePhone()">${opts}</select>
-          <div id="pdv-phone-display" style="font-size:13px;color:#25D366;padding:6px 0">+${(state.contacts.find(c => c.id === selId) || state.contacts[0])?.phone || ''}</div>
+          <label class="pdv-form-label">Cliente *</label>
+          <select class="form-input ${!selId ? 'pdv-field-required' : ''}" id="pdv-contact" onchange="state._pdvSelectedContact=this.value;pdvUpdatePhone();render()">${opts}</select>
+          ${selContact ? `<div id="pdv-phone-display" style="font-size:13px;color:#25D366;padding:6px 0">+${selContact.phone}</div>` : ''}
           <div style="display:flex;gap:16px">
             <button class="pdv-new-client" onclick="state.modal='pdvNewContact';render()">+ Nova cliente</button>
-            <button class="pdv-new-client" onclick="pdvOpenEditContact()">✏️ Editar contato</button>
+            ${selContact ? `<button class="pdv-new-client" onclick="pdvOpenEditContact()">✏️ Editar contato</button>` : ''}
           </div>
         </div>
         <div class="pdv-form-row">
           <div class="pdv-form-group" style="flex:1">
-            <label class="pdv-form-label">Parcelas</label>
+            <label class="pdv-form-label">Parcelas *</label>
             <select class="form-input" id="pdv-parcels">
-              ${Array.from({length:12},(_,i)=>`<option value="${i+1}" ${i===2?'selected':''}>${i+1}x</option>`).join('')}
+              <option value="" disabled selected>—</option>
+              ${Array.from({length:12},(_,i)=>`<option value="${i+1}">${i+1}x</option>`).join('')}
             </select>
           </div>
           <div class="pdv-form-group" style="flex:1">

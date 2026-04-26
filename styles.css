@@ -281,6 +281,11 @@ body {
 .pdv-detail-name { color: #fff; font-size: 16px; font-weight: 600; }
 .pdv-detail-total { text-align: right; color: #fff; font-size: 18px; font-weight: 700; padding: 8px 0 16px; }
 
+.pdv-discount-btn { background: none; border: 1px solid #444; border-radius: 10px; padding: 6px 14px; color: #ccc; font-size: 13px; cursor: pointer; }
+.pdv-discount-btn:active { border-color: #D4537E; color: #D4537E; }
+
+.pdv-field-required { border-color: #D4537E !important; }
+
 /* Quantity control */
 .pdv-qty-control { display: flex; align-items: center; gap: 12px; }
 .pdv-qty-btn { width: 32px; height: 32px; border-radius: 50%; background: #333; border: none; color: #fff; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
