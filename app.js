@@ -572,17 +572,25 @@ async function pdvSaveEditContact() {
   } catch (e) { showToast('Erro ao atualizar.', '#A32D2D'); }
 }
 
-async function pdvSubmit() {
+function pdvGoReview() {
   const contactId = document.getElementById('pdv-contact')?.value;
   const parcelsRaw = document.getElementById('pdv-parcels')?.value;
-  const isAberto = parcelsRaw === 'aberto';
-  const parcels = isAberto ? 1 : parseInt(parcelsRaw);
   const day = parseInt(document.getElementById('pdv-day')?.value);
   const method = document.querySelector('input[name="pdv-method"]:checked')?.value || 'pix';
   const totalDiscount = parseFloat(document.getElementById('pdv-total-discount')?.value) || 0;
   if (!contactId) { showToast('Selecione a cliente', '#A32D2D'); return; }
   if (!parcelsRaw) { showToast('Selecione o número de parcelas', '#A32D2D'); return; }
   if (!day) { showToast('Selecione o dia de cobrança', '#A32D2D'); return; }
+
+  state._pdvReview = { contactId, parcelsRaw, day, method, totalDiscount };
+  state.pdvStep = 'review';
+  render();
+}
+
+async function pdvSubmit() {
+  const { contactId, parcelsRaw, day, method, totalDiscount } = state._pdvReview;
+  const isAberto = parcelsRaw === 'aberto';
+  const parcels = isAberto ? 1 : parseInt(parcelsRaw);
 
   const contact = getContact(contactId);
   const items = [];
@@ -844,7 +852,7 @@ function renderPDV() {
         </div>
       </div>
       <div class="pdv-bottom">
-        <button class="pdv-btn-next pdv-btn-confirm" onclick="pdvSubmit()">Registrar venda</button>
+        <button class="pdv-btn-next" onclick="pdvGoReview()">Resumo da venda</button>
       </div>
       ${state.modal === 'pdvNewContact' ? `
         <div class="modal-overlay" onclick="state.modal=null;render()">
@@ -872,6 +880,75 @@ function renderPDV() {
           </div>
         </div>`;
       })() : ''}
+    </div>`;
+  }
+
+  // ── STEP: REVIEW ──
+  if (state.pdvStep === 'review' && state._pdvReview) {
+    const rv = state._pdvReview;
+    const contact = getContact(rv.contactId);
+    const rawSub = state.pdvCart.reduce((a, i) => a + i.value * (i.qty || 1), 0);
+    const itemDiscTotal = state.pdvCart.reduce((a, i) => a + (i.discount || 0) * (i.qty || 1), 0);
+    const afterItemDisc = pdvCartTotal();
+    const finalTotal = Math.max(0, afterItemDisc - rv.totalDiscount);
+    const hasAnyDiscount = itemDiscTotal > 0 || rv.totalDiscount > 0;
+    const isAberto = rv.parcelsRaw === 'aberto';
+    const parcels = isAberto ? 1 : parseInt(rv.parcelsRaw);
+    const pv = Math.round(finalTotal / parcels);
+
+    return `<div class="pdv-overlay">
+      ${topbar("state.pdvStep='payment';render()", 'Resumo da venda')}
+      <div class="pdv-review-scroll">
+        <div class="pdv-review-section">
+          <div class="pdv-review-label">Produtos</div>
+          ${state.pdvCart.map(item => `
+            <div class="pdv-review-product">
+              <div class="pdv-review-product-left">
+                <span class="pdv-review-product-name">${(item.qty||1) > 1 ? item.qty + 'x ' : ''}${item.description}</span>
+                <span class="pdv-review-product-cat">${item.category === 'joia' ? 'Jóia' : 'Mary Kay'}</span>
+              </div>
+              <div class="pdv-review-product-price">R$ ${(item.value * (item.qty||1)).toLocaleString('pt-BR')}</div>
+            </div>
+            ${item.discount ? `<div style="font-size:13px;color:#3B6D11;text-align:right;margin-top:-4px;padding-bottom:8px">desconto - R$ ${((item.discount||0) * (item.qty||1)).toLocaleString('pt-BR')}</div>` : ''}
+          `).join('')}
+        </div>
+
+        <div class="pdv-review-totals">
+          ${hasAnyDiscount ? `
+            <div class="pdv-review-row"><span>Subtotal</span><span>R$ ${rawSub.toLocaleString('pt-BR')}</span></div>
+            ${itemDiscTotal > 0 ? `<div class="pdv-review-row pdv-review-disc"><span>Desc. produtos</span><span>- R$ ${itemDiscTotal.toLocaleString('pt-BR')}</span></div>` : ''}
+            ${rv.totalDiscount > 0 ? `<div class="pdv-review-row pdv-review-disc"><span>Desc. venda</span><span>- R$ ${rv.totalDiscount.toLocaleString('pt-BR')}</span></div>` : ''}
+          ` : ''}
+          <div class="pdv-review-total-final">
+            <span>Total</span>
+            <span>R$ ${finalTotal.toLocaleString('pt-BR')}</span>
+          </div>
+        </div>
+
+        <div class="pdv-review-section">
+          <div class="pdv-review-info">
+            <div class="pdv-review-info-row">
+              <span class="pdv-review-info-label">Cliente</span>
+              <span class="pdv-review-info-value">${contact?.name || '—'}</span>
+            </div>
+            <div class="pdv-review-info-row">
+              <span class="pdv-review-info-label">Parcelas</span>
+              <span class="pdv-review-info-value">${isAberto ? 'Em aberto' : rv.parcelsRaw + 'x de R$ ' + pv.toLocaleString('pt-BR')}</span>
+            </div>
+            <div class="pdv-review-info-row">
+              <span class="pdv-review-info-label">Dia de cobrança</span>
+              <span class="pdv-review-info-value">Dia ${rv.day}</span>
+            </div>
+            <div class="pdv-review-info-row">
+              <span class="pdv-review-info-label">Pagamento</span>
+              <span class="pdv-review-info-value">${rv.method === 'pix' ? 'Pix' : 'Cartão'}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="pdv-bottom">
+        <button class="pdv-btn-next pdv-btn-confirm" onclick="pdvSubmit()">Registrar venda</button>
+      </div>
     </div>`;
   }
 

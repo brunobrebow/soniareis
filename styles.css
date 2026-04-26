@@ -315,6 +315,27 @@ body {
 
 /* PDV Success */
 .pdv-success-scroll { flex: 1; overflow-y: auto; padding: 0 20px; text-align: center; }
+
+/* PDV Review */
+.pdv-review-scroll { flex: 1; overflow-y: auto; padding: 0 20px; -webkit-overflow-scrolling: touch; }
+.pdv-review-section { margin-bottom: 16px; }
+.pdv-review-label { font-size: 13px; color: #888; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 12px; }
+.pdv-review-product { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #222; }
+.pdv-review-product-left { display: flex; flex-direction: column; gap: 4px; }
+.pdv-review-product-name { color: #fff; font-size: 16px; font-weight: 500; }
+.pdv-review-product-cat { font-size: 11px; color: #888; background: #222; display: inline-block; padding: 2px 8px; border-radius: 8px; width: fit-content; }
+.pdv-review-product-price { color: #fff; font-size: 17px; font-weight: 600; }
+
+.pdv-review-totals { background: #1a1a1a; border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+.pdv-review-row { display: flex; justify-content: space-between; font-size: 15px; color: #ccc; padding: 4px 0; }
+.pdv-review-disc { color: #3B6D11; }
+.pdv-review-total-final { display: flex; justify-content: space-between; font-size: 24px; font-weight: 700; color: #fff; padding-top: 10px; margin-top: 8px; border-top: 1px solid #333; }
+
+.pdv-review-info { background: #1a1a1a; border-radius: 14px; padding: 16px; }
+.pdv-review-info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #222; }
+.pdv-review-info-row:last-child { border-bottom: none; }
+.pdv-review-info-label { font-size: 14px; color: #888; }
+.pdv-review-info-value { font-size: 15px; color: #fff; font-weight: 500; }
 .pdv-success-icon { width: 64px; height: 64px; border-radius: 50%; background: #3B6D11; color: white; font-size: 32px; display: flex; align-items: center; justify-content: center; margin: 20px auto 12px; }
 .pdv-success-title { color: #fff; font-size: 22px; font-weight: 700; margin-bottom: 20px; }
 
