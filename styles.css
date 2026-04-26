@@ -177,7 +177,7 @@ body {
 .metric-card { background: #f9f9f9; border-radius: 14px; padding: 14px; border: 2px solid transparent; transition: all 0.2s; }
 .metric-card-active { background: #FBEAF0; border-color: #D4537E; }
 .metric-label { font-size: 12px; color: #aaa; margin-bottom: 6px; }
-.metric-value { font-size: 22px; font-weight: 600; color: #1a1a1a; }
+.metric-value { font-size: 18px; font-weight: 600; color: #1a1a1a; }
 .metric-sub { font-size: 11px; color: #aaa; margin-top: 4px; }
 .upcoming-list { padding: 0 16px; }
 .upcoming-item { display: flex; align-items: center; justify-content: space-between; padding: 13px 0; border-bottom: 1px solid #f5f5f5; }
@@ -298,6 +298,15 @@ body {
 .home-meta-link { cursor: pointer; color: #bbb; font-size: 11px; text-decoration: underline; }
 
 /* ─── MISC ─── */
+
+/* ─── FINANCE TRANSACTIONS ─── */
+.fin-transaction { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid #f5f5f5; }
+.fin-tx-left { flex: 1; min-width: 0; }
+.fin-tx-name { font-size: 15px; font-weight: 500; color: #1a1a1a; }
+.fin-tx-desc { font-size: 12px; color: #aaa; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fin-tx-right { text-align: right; margin-left: 12px; flex-shrink: 0; }
+.fin-tx-value { font-size: 15px; font-weight: 600; }
+.fin-tx-date { font-size: 11px; color: #aaa; margin-top: 2px; }
 .empty-state { text-align: center; padding: 48px 20px; color: #bbb; font-size: 14px; line-height: 1.6; }
 .spinner { width: 32px; height: 32px; border: 3px solid #f0f0f0; border-top-color: #D4537E; border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

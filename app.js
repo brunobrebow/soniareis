@@ -43,7 +43,9 @@ let state = {
   modal: null,
   modalExtra: null,
   chargeFilter: 'mes',
-  financeDetail: null,
+  financeDetail: 'recebido',
+  financePeriod: 'mes',
+  financeCustomMonth: null,
   chargeModal: null,
   paidModal: null,
   deleteContactModal: null,
@@ -716,7 +718,7 @@ function renderPDV() {
 
 // ---------- NAVIGATION ----------
 
-function switchTab(tab) { state.tab = tab; state.detail = null; state.financeDetail = null; render(); }
+function switchTab(tab) { state.tab = tab; state.detail = null; state.financeDetail = 'recebido'; state.financePeriod = 'mes'; state.financeCustomMonth = null; render(); }
 function updateSearch(v) {
   state.search = v;
   render();
@@ -731,7 +733,24 @@ function closeDetail() { state.detail = null; render(); }
 function openModal(m, extra) { state.modal = m; state.modalExtra = extra || null; render(); }
 function closeModal() { state.modal = null; state.chargeModal = null; state.paidModal = null; state.deleteContactModal = null; render(); setTimeout(lockScroll, 100); setTimeout(lockScroll, 300); }
 function setChargeFilter(f) { state.chargeFilter = f; render(); }
-function toggleFinanceDetail(key) { state.financeDetail = state.financeDetail === key ? null : key; render(); }
+function selectFinanceCard(key) { state.financeDetail = key; render(); }
+function setFinancePeriod(p) {
+  if (p === 'custom') {
+    state.modal = 'financePeriod';
+  } else {
+    state.financePeriod = p;
+    state.financeCustomMonth = null;
+  }
+  render();
+}
+function confirmFinancePeriod() {
+  const val = document.getElementById('finance-month')?.value;
+  if (val) {
+    state.financePeriod = 'custom';
+    state.financeCustomMonth = val;
+    closeModal();
+  }
+}
 function openPaidModal(saleId, parcelIndex) { state.paidModal = { saleId, parcelIndex }; render(); }
 function openDeleteContactModal(id) { state.deleteContactModal = id; render(); }
 function openWpp(url) { window.open(url, '_blank'); closeModal(); }
@@ -1098,83 +1117,149 @@ function renderCobrancas() {
 }
 
 function renderFinanceiro() {
-  const recebido = state.payments.filter(p => p.paid).reduce((acc, p) => {
-    const sale = state.sales.find(s => s.id === p.sale_id);
-    return acc + (sale ? sale.parcel_value : 0);
-  }, 0);
-  const pendente = state.payments.filter(p => !p.paid).reduce((acc, p) => {
-    const sale = state.sales.find(s => s.id === p.sale_id);
-    return acc + (sale ? sale.parcel_value : 0);
-  }, 0);
-  const atrasado = getDueCharges('atrasado').reduce((a, c) => a + c.parcel.remaining, 0);
-  const upcoming = getDueCharges('mes').slice(0, 8);
+  const mesesNomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const today = new Date();
+  let filterMonth, filterYear, periodLabel;
 
-  // Monthly projection for "A receber"
-  const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-  let monthlyData = [];
-  if (state.financeDetail === 'a_receber') {
-    const monthMap = {};
-    state.sales.forEach(sale => {
-      const parcels = getSaleParcels(sale);
-      parcels.forEach(p => {
-        if (p.paid) return;
-        const key = `${p.date.getFullYear()}-${String(p.date.getMonth()).padStart(2, '0')}`;
-        const label = `${meses[p.date.getMonth()]} ${p.date.getFullYear()}`;
-        if (!monthMap[key]) monthMap[key] = { key, label, total: 0, count: 0 };
-        monthMap[key].total += p.amount;
-        monthMap[key].count++;
-      });
-    });
-    monthlyData = Object.values(monthMap).sort((a, b) => a.key.localeCompare(b.key));
+  if (state.financePeriod === 'custom' && state.financeCustomMonth) {
+    const [y, m] = state.financeCustomMonth.split('-');
+    filterMonth = parseInt(m) - 1;
+    filterYear = parseInt(y);
+    periodLabel = `${mesesNomes[filterMonth]} ${filterYear}`;
+  } else {
+    filterMonth = today.getMonth();
+    filterYear = today.getFullYear();
+    periodLabel = 'Este mês';
   }
 
-  const isActive = state.financeDetail === 'a_receber';
-  const sectionTitle = isActive ? 'Previsão por mês' : 'Próximas cobranças';
+  const isInPeriod = (dateStr) => {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    return d.getMonth() === filterMonth && d.getFullYear() === filterYear;
+  };
+
+  // Recebido no período
+  const paidInPeriod = state.payments.filter(p => p.paid && isInPeriod(p.paid_at));
+  const recebido = paidInPeriod.reduce((a, p) => {
+    const sale = state.sales.find(s => s.id === p.sale_id);
+    return a + (p.paid_amount || sale?.parcel_value || 0);
+  }, 0);
+
+  // A receber no período (parcelas com vencimento no período, não pagas)
+  const aReceberItems = [];
+  state.sales.forEach(sale => {
+    getSaleParcels(sale).forEach(p => {
+      if (!p.paid && p.date.getMonth() === filterMonth && p.date.getFullYear() === filterYear) {
+        aReceberItems.push({ sale, parcel: p, contact: getContact(sale.contact_id) });
+      }
+    });
+  });
+  const pendente = aReceberItems.reduce((a, item) => a + item.parcel.remaining, 0);
+
+  // Em atraso (vencidas e não pagas, qualquer período)
+  const atrasadoItems = [];
+  state.sales.forEach(sale => {
+    getSaleParcels(sale).forEach(p => {
+      if (!p.paid && p.date < today && !(p.date.getDate() === today.getDate() && p.date.getMonth() === today.getMonth())) {
+        atrasadoItems.push({ sale, parcel: p, contact: getContact(sale.contact_id) });
+      }
+    });
+  });
+  atrasadoItems.sort((a, b) => a.parcel.date - b.parcel.date);
+  const atrasado = atrasadoItems.reduce((a, item) => a + item.parcel.remaining, 0);
+
+  const sel = state.financeDetail || 'recebido';
+
+  // Build transaction list based on selected card
+  let transactions = [];
+  let listTitle = '';
+
+  if (sel === 'recebido') {
+    listTitle = 'Pagamentos recebidos';
+    paidInPeriod.forEach(p => {
+      const sale = state.sales.find(s => s.id === p.sale_id);
+      if (!sale) return;
+      const contact = getContact(sale.contact_id);
+      transactions.push({
+        name: contact?.name?.split(' ').slice(0, 2).join(' ') || '—',
+        desc: sale.description,
+        date: p.paid_at ? new Date(p.paid_at).toLocaleDateString('pt-BR') : '—',
+        value: p.paid_amount || sale.parcel_value,
+        color: '#3B6D11',
+        prefix: '+'
+      });
+    });
+    transactions.sort((a, b) => new Date(b.date.split('/').reverse().join('-')) - new Date(a.date.split('/').reverse().join('-')));
+  } else if (sel === 'a_receber') {
+    listTitle = 'Parcelas a receber';
+    aReceberItems.sort((a, b) => a.parcel.date - b.parcel.date);
+    aReceberItems.forEach(({ sale, parcel, contact }) => {
+      transactions.push({
+        name: contact?.name?.split(' ').slice(0, 2).join(' ') || '—',
+        desc: `${sale.description} · Parc. ${parcel.index + 1}/${sale.parcels}`,
+        date: parcel.dateStr,
+        value: parcel.remaining,
+        color: '#993556',
+        prefix: ''
+      });
+    });
+  } else if (sel === 'atrasado') {
+    listTitle = 'Parcelas em atraso';
+    atrasadoItems.forEach(({ sale, parcel, contact }) => {
+      transactions.push({
+        name: contact?.name?.split(' ').slice(0, 2).join(' ') || '—',
+        desc: `${sale.description} · Parc. ${parcel.index + 1}/${sale.parcels}`,
+        date: parcel.dateStr,
+        value: parcel.remaining,
+        color: '#A32D2D',
+        prefix: ''
+      });
+    });
+  }
 
   return `
     <div class="screen-fixed-header">
       <div class="topbar">
         <div class="topbar-row">
-          <div><h2>Financeiro</h2><p>Visão geral</p></div>
+          <div><h2>Financeiro</h2></div>
         </div>
       </div>
-      <div class="metric-grid">
-        <div class="metric-card"><div class="metric-label">Recebido</div><div class="metric-value" style="color:#3B6D11">R$ ${recebido.toLocaleString('pt-BR')}</div><div class="metric-sub">parcelas pagas</div></div>
-        <div class="metric-card ${isActive ? 'metric-card-active' : ''}" onclick="toggleFinanceDetail('a_receber')" style="cursor:pointer"><div class="metric-label">A receber ${isActive ? '✕' : '›'}</div><div class="metric-value" style="color:#993556">R$ ${pendente.toLocaleString('pt-BR')}</div><div class="metric-sub">toque para ver meses</div></div>
-        <div class="metric-card"><div class="metric-label">Em atraso</div><div class="metric-value" style="color:#A32D2D">R$ ${atrasado.toLocaleString('pt-BR')}</div><div class="metric-sub">${getDueCharges('atrasado').length} cobranças</div></div>
-        <div class="metric-card"><div class="metric-label">Clientes</div><div class="metric-value">${state.contacts.length}</div><div class="metric-sub">cadastradas</div></div>
+      <div class="filter-tabs">
+        <button class="filter-tab ${state.financePeriod === 'mes' ? 'active' : ''}" onclick="setFinancePeriod('mes')">Este mês</button>
+        <button class="filter-tab ${state.financePeriod === 'custom' ? 'active' : ''}" onclick="setFinancePeriod('custom')">${state.financePeriod === 'custom' ? periodLabel : 'Selecionar período'}</button>
       </div>
-      <div class="section-label" style="margin-top:8px">${sectionTitle}</div>
+      <div class="metric-grid" style="grid-template-columns:1fr 1fr 1fr">
+        <div class="metric-card ${sel === 'recebido' ? 'metric-card-active' : ''}" onclick="selectFinanceCard('recebido')" style="cursor:pointer">
+          <div class="metric-label">Recebido</div>
+          <div class="metric-value" style="color:#3B6D11">R$ ${recebido.toLocaleString('pt-BR')}</div>
+        </div>
+        <div class="metric-card ${sel === 'a_receber' ? 'metric-card-active' : ''}" onclick="selectFinanceCard('a_receber')" style="cursor:pointer">
+          <div class="metric-label">A receber</div>
+          <div class="metric-value" style="color:#993556">R$ ${pendente.toLocaleString('pt-BR')}</div>
+        </div>
+        <div class="metric-card ${sel === 'atrasado' ? 'metric-card-active' : ''}" onclick="selectFinanceCard('atrasado')" style="cursor:pointer">
+          <div class="metric-label">Em atraso</div>
+          <div class="metric-value" style="color:#A32D2D">R$ ${atrasado.toLocaleString('pt-BR')}</div>
+        </div>
+      </div>
+      <div class="section-label" style="margin-top:8px">${listTitle}</div>
     </div>
     <div class="screen-scroll-list">
-      ${isActive ? `
-        <div class="upcoming-list">
-          ${monthlyData.length === 0 ? '<div class="empty-state" style="padding:20px">Nenhuma parcela pendente.</div>' : ''}
-          ${monthlyData.map(m => `
-            <div class="upcoming-item">
-              <div>
-                <div class="upcoming-name">${m.label}</div>
-                <div class="upcoming-date">${m.count} parcela${m.count > 1 ? 's' : ''}</div>
-              </div>
-              <div class="upcoming-val">R$ ${m.total.toLocaleString('pt-BR')}</div>
-            </div>`).join('')}
-        </div>
-      ` : `
-        <div class="upcoming-list">
-          ${upcoming.length === 0 ? '<div class="empty-state" style="padding:20px">Nenhuma cobrança próxima.</div>' : ''}
-          ${upcoming.map(({ sale, parcel, contact }) => {
-            if (!contact) return '';
-            return `
-              <div class="upcoming-item">
-                <div>
-                  <div class="upcoming-name">${contact.name.split(' ').slice(0, 2).join(' ')}</div>
-                  <div class="upcoming-date">${sale.description} · ${parcel.dateStr}</div>
-                </div>
-                <div class="upcoming-val">R$ ${parcel.remaining}</div>
-              </div>`;
-          }).join('')}
-        </div>
-      `}
+      <div class="upcoming-list">
+        ${transactions.length === 0 ? '<div class="empty-state" style="padding:20px">Nenhuma transação neste período.</div>' : ''}
+        ${transactions.map(t => `
+          <div class="fin-transaction">
+            <div class="fin-tx-left">
+              <div class="fin-tx-name">${t.name}</div>
+              <div class="fin-tx-desc">${t.desc}</div>
+            </div>
+            <div class="fin-tx-right">
+              <div class="fin-tx-value" style="color:${t.color}">${t.prefix}R$ ${t.value.toLocaleString('pt-BR')}</div>
+              <div class="fin-tx-date">${t.date}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
     </div>`;
 }
 
@@ -1364,6 +1449,22 @@ function renderModal() {
           </div>
         `}
         <button class="btn-cancel" onclick="closeModal()">Fechar</button>
+      </div>
+    </div>`;
+  }
+
+  if (state.modal === 'financePeriod') {
+    const today = new Date();
+    const defaultVal = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    return `<div class="modal-overlay" onclick="closeModal()">
+      <div class="modal-sheet" onclick="event.stopPropagation()">
+        <div class="modal-title">Selecionar período</div>
+        <div class="form-group">
+          <label class="form-label">Mês e ano</label>
+          <input class="form-input" id="finance-month" type="month" value="${state.financeCustomMonth || defaultVal}" />
+        </div>
+        <button class="btn-primary" onclick="confirmFinancePeriod()">Confirmar</button>
+        <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
       </div>
     </div>`;
   }
