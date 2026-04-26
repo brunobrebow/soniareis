@@ -250,22 +250,45 @@ body {
 .pdv-lock { background: none; border: none; color: #555; cursor: pointer; padding: 6px; border-radius: 8px; }
 .pdv-locked { color: #D4537E; background: rgba(212,83,126,0.15); }
 
-.pdv-center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
-.pdv-label { color: #666; font-size: 14px; }
-.pdv-total-display { color: #fff; font-size: 56px; font-weight: 700; letter-spacing: -1px; }
+/* Choose category */
+.pdv-choose-body { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 20px; }
+.pdv-choose-label { color: #888; font-size: 15px; margin-bottom: 20px; }
+.pdv-choose-btns { display: flex; gap: 14px; width: 100%; }
+.pdv-cat-big { flex: 1; padding: 28px 16px; background: #1a1a1a; border: 2px solid #333; border-radius: 16px; color: #fff; font-size: 18px; font-weight: 600; cursor: pointer; text-align: center; transition: all 0.15s; }
+.pdv-cat-big:active { border-color: #D4537E; background: #222; }
+.pdv-cat-mk:active { border-color: #D4537E; }
 
-.pdv-cart-list { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 12px; padding: 0 20px; max-height: 120px; overflow-y: auto; }
-.pdv-cart-item { background: #222; border-radius: 20px; padding: 6px 12px; font-size: 14px; color: #ccc; display: flex; align-items: center; gap: 8px; }
+/* Product list (Jóia) */
+.pdv-product-list { flex: 1; overflow-y: auto; padding: 8px 16px; }
+.pdv-product-btn { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 18px 16px; background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 14px; margin-bottom: 10px; cursor: pointer; }
+.pdv-product-btn:active { border-color: #D4537E; background: #222; }
+.pdv-product-name { color: #fff; font-size: 16px; font-weight: 500; }
+.pdv-product-price { color: #D4537E; font-size: 14px; font-weight: 500; }
+
+/* Price option buttons */
+.pdv-price-opt { flex: 1; padding: 22px 16px; background: #1a1a1a; border: 2px solid #333; border-radius: 14px; color: #fff; font-size: 22px; font-weight: 700; cursor: pointer; text-align: center; transition: all 0.15s; }
+.pdv-price-opt:active { border-color: #D4537E; background: #222; }
+
+/* Cart summary */
+.pdv-cart-summary { width: 100%; padding: 16px 20px 0; border-top: 1px solid #222; margin-top: 16px; }
+.pdv-cart-count { font-size: 12px; color: #888; margin-bottom: 8px; }
+.pdv-cart-items-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.pdv-cart-chip { background: #222; border-radius: 20px; padding: 6px 12px; font-size: 13px; color: #ccc; display: flex; align-items: center; gap: 8px; }
 .pdv-cart-rm { background: none; border: none; color: #666; font-size: 12px; cursor: pointer; padding: 0; }
 
-.pdv-bottom { padding: 16px 20px 20px; }
-.pdv-add-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-.pdv-add-rs { color: #666; font-size: 18px; font-weight: 500; }
-.pdv-add-input { flex: 1; background: #1a1a1a; border: 1px solid #333; border-radius: 12px; padding: 14px; color: #fff; font-size: 18px; outline: none; -webkit-appearance: none; -moz-appearance: textfield; }
-.pdv-add-input:focus { border-color: #D4537E; }
-.pdv-add-input::-webkit-inner-spin-button, .pdv-add-input::-webkit-outer-spin-button { -webkit-appearance: none; }
-.pdv-add-btn { width: 50px; height: 50px; border-radius: 50%; background: #D4537E; border: none; color: white; font-size: 24px; cursor: pointer; flex-shrink: 0; }
+/* Detail cards */
+.pdv-detail-card { background: #1a1a1a; border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+.pdv-detail-name { color: #fff; font-size: 16px; font-weight: 600; }
+.pdv-detail-total { text-align: right; color: #fff; font-size: 18px; font-weight: 700; padding: 8px 0 16px; }
 
+/* Quantity control */
+.pdv-qty-control { display: flex; align-items: center; gap: 12px; }
+.pdv-qty-btn { width: 32px; height: 32px; border-radius: 50%; background: #333; border: none; color: #fff; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.pdv-qty-btn:active { background: #D4537E; }
+.pdv-qty-num { color: #fff; font-size: 18px; font-weight: 600; min-width: 20px; text-align: center; }
+
+/* Shared PDV styles */
+.pdv-bottom { padding: 16px 20px 20px; }
 .pdv-btn-next { width: 100%; padding: 16px; background: #D4537E; border: none; border-radius: 14px; color: white; font-size: 16px; font-weight: 600; cursor: pointer; }
 .pdv-btn-confirm { background: #3B6D11; }
 
@@ -279,13 +302,6 @@ body {
 .pdv-form-row { display: flex; gap: 12px; }
 .pdv-new-client { background: none; border: none; color: #D4537E; font-size: 13px; cursor: pointer; padding: 6px 0; }
 
-.pdv-detail-card { background: #1a1a1a; border-radius: 14px; padding: 14px; margin-bottom: 12px; }
-.pdv-detail-val { color: #D4537E; font-size: 18px; font-weight: 600; margin-bottom: 10px; }
-.pdv-cat-row { display: flex; gap: 16px; margin-top: 4px; }
-.pdv-cat-opt { color: #ccc; font-size: 14px; display: flex; align-items: center; gap: 6px; cursor: pointer; }
-.pdv-cat-opt input { accent-color: #D4537E; }
-
-/* PDV Toggle Buttons (Jóia / Mary Kay, Pix / Cartão) */
 .pdv-toggle-row { display: flex; gap: 10px; }
 .pdv-toggle-input { display: none; }
 .pdv-toggle-btn { flex: 1; padding: 12px; border: 2px solid #444; border-radius: 12px; text-align: center; color: #aaa; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.15s; }

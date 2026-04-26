@@ -364,13 +364,23 @@ async function confirmDeleteContact() {
 
 // ---------- PDV MODE ----------
 
+const JOIA_PRODUCTS = [
+  { name: 'Anel', prices: [50] },
+  { name: 'Bracelete', prices: [90] },
+  { name: 'Brinco', prices: [30, 50] },
+  { name: 'Corrente', prices: [100, 120] },
+  { name: 'Pulseira', prices: [60, 80] },
+  { name: 'Relógio', prices: [150] },
+];
+
 function enterPDV() {
   state.pdvMode = true;
   state.pdvLocked = false;
-  state.pdvStep = 'cart';
+  state.pdvStep = 'choose';
   state.pdvCart = [];
   state.pdvResult = null;
   state.modal = null;
+  state._pdvCatChoice = null;
   document.querySelector('meta[name="theme-color"]').content = '#111111';
   render();
 }
@@ -388,11 +398,44 @@ function togglePDVLock() {
   render();
 }
 
-function pdvAddItem() {
-  const input = document.getElementById('pdv-input');
-  const val = parseFloat(input?.value);
-  if (!val || val <= 0) { showToast('Insira um valor', '#A32D2D'); return; }
-  state.pdvCart.push({ value: val, description: '', category: '' });
+function pdvChooseCategory(cat) {
+  state._pdvCatChoice = cat;
+  if (cat === 'joia') {
+    state.pdvStep = 'joia_select';
+  } else {
+    state.pdvStep = 'mk_input';
+  }
+  render();
+}
+
+function pdvAddJoia(name, price) {
+  state.pdvCart.push({ description: name, category: 'joia', value: price, qty: 1, priceEditable: false });
+  state.pdvStep = 'choose';
+  state._pdvCatChoice = null;
+  render();
+}
+
+function pdvAddJoiaWithPrice(name, prices) {
+  if (prices.length === 1) {
+    pdvAddJoia(name, prices[0]);
+  } else {
+    state._pdvJoiaName = name;
+    state._pdvJoiaPrices = prices;
+    state.pdvStep = 'joia_price';
+    render();
+  }
+}
+
+function pdvConfirmJoiaPrice(price) {
+  pdvAddJoia(state._pdvJoiaName, price);
+}
+
+function pdvAddMaryKay() {
+  const name = document.getElementById('pdv-mk-name')?.value?.trim();
+  if (!name) { showToast('Digite o nome do produto', '#A32D2D'); return; }
+  state.pdvCart.push({ description: name, category: 'marykay', value: 0, qty: 1, priceEditable: true });
+  state.pdvStep = 'choose';
+  state._pdvCatChoice = null;
   render();
 }
 
@@ -401,36 +444,44 @@ function pdvRemoveItem(i) {
   render();
 }
 
-function pdvCartTotal() {
-  return state.pdvCart.reduce((a, item) => a + item.value, 0);
+function pdvUpdateQty(i, delta) {
+  state.pdvCart[i].qty = Math.max(1, (state.pdvCart[i].qty || 1) + delta);
+  render();
 }
 
 function pdvGoDetails() {
-  if (state.pdvCart.length === 0) { showToast('Adicione pelo menos um item', '#A32D2D'); return; }
+  if (state.pdvCart.length === 0) { showToast('Adicione pelo menos um produto', '#A32D2D'); return; }
   state.pdvStep = 'details';
   render();
 }
 
+function pdvDetailsBack() {
+  state.pdvStep = 'choose';
+  render();
+}
+
+function pdvCartTotal() {
+  return state.pdvCart.reduce((a, item) => a + (item.value * (item.qty || 1)), 0);
+}
+
 function pdvGoPayment() {
-  // Validate descriptions and categories
+  // Read edited values
   for (let i = 0; i < state.pdvCart.length; i++) {
-    const desc = document.getElementById('pdv-desc-' + i)?.value?.trim();
-    const cat = document.querySelector(`input[name="pdv-cat-${i}"]:checked`)?.value;
-    const qty = parseInt(document.getElementById('pdv-qty-' + i)?.value) || 1;
-    if (!desc) { showToast(`Preencha a descrição do item ${i + 1}`, '#A32D2D'); return; }
-    if (!cat) { showToast(`Selecione Jóia ou Mary Kay no item ${i + 1}`, '#A32D2D'); return; }
-    state.pdvCart[i].description = desc;
-    state.pdvCart[i].category = cat;
-    state.pdvCart[i].qty = qty;
+    const valInput = document.getElementById('pdv-val-' + i);
+    if (valInput) {
+      state.pdvCart[i].value = parseFloat(valInput.value) || 0;
+    }
+    if (state.pdvCart[i].value <= 0) {
+      showToast(`Insira o valor do item ${i + 1}`, '#A32D2D'); return;
+    }
   }
   state.pdvStep = 'payment';
   render();
 }
 
-function pdvBack() {
-  if (state.pdvStep === 'details') { state.pdvStep = 'cart'; render(); }
-  else if (state.pdvStep === 'payment') { state.pdvStep = 'details'; render(); }
-  else if (state.pdvStep === 'success') { state.pdvStep = 'cart'; state.pdvCart = []; state.pdvResult = null; render(); }
+function pdvPaymentBack() {
+  state.pdvStep = 'details';
+  render();
 }
 
 async function pdvAddContact() {
@@ -478,9 +529,7 @@ async function pdvSaveEditContact() {
     state.modal = null;
     showToast('Contato atualizado!');
     render();
-  } catch (e) {
-    showToast('Erro ao atualizar.', '#A32D2D');
-  }
+  } catch (e) { showToast('Erro ao atualizar.', '#A32D2D'); }
 }
 
 async function pdvSubmit() {
@@ -492,16 +541,18 @@ async function pdvSubmit() {
 
   const contact = getContact(contactId);
   const items = [];
+  const total = pdvCartTotal();
 
   try {
     for (const item of state.pdvCart) {
+      const itemTotal = item.value * (item.qty || 1);
       const descWithQty = (item.qty || 1) > 1 ? `${item.qty}x ${item.description}` : item.description;
       const newSale = await DB.addSale({
         contact_id: contactId,
         description: descWithQty,
-        total: item.value,
+        total: itemTotal,
         parcels,
-        parcel_value: Math.round(item.value / parcels),
+        parcel_value: Math.round(itemTotal / parcels),
         start_day: day,
         payment_method: method,
         category: item.category
@@ -509,10 +560,10 @@ async function pdvSubmit() {
       state.sales.push(newSale);
       const newPayments = await DB.initPayments(newSale.id, parcels);
       state.payments.push(...newPayments);
-      items.push({ ...item, parcel_value: Math.round(item.value / parcels) });
+      items.push({ ...item, total: itemTotal, parcel_value: Math.round(itemTotal / parcels) });
     }
 
-    state.pdvResult = { items, contact, parcels, day, method, total: pdvCartTotal() };
+    state.pdvResult = { items, contact, parcels, day, method, total };
     state.pdvStep = 'success';
     render();
   } catch (e) {
@@ -526,8 +577,8 @@ function pdvShareWhatsApp() {
   if (!r) return;
   const parcelVal = Math.round(r.total / r.parcels);
   let msg = `*Resumo da compra*\n\n`;
-  r.items.forEach((item, i) => {
-    msg += `• ${item.qty > 1 ? item.qty + 'x ' : ''}${item.description} (${item.category === 'joia' ? 'Jóia' : 'Mary Kay'}) — R$ ${item.value.toLocaleString('pt-BR')}\n`;
+  r.items.forEach(item => {
+    msg += `• ${item.qty > 1 ? item.qty + 'x ' : ''}${item.description} (${item.category === 'joia' ? 'Jóia' : 'Mary Kay'}) — R$ ${(item.value * (item.qty || 1)).toLocaleString('pt-BR')}\n`;
   });
   msg += `\n*Total: R$ ${r.total.toLocaleString('pt-BR')}*\n`;
   msg += `*${r.parcels}x de R$ ${parcelVal.toLocaleString('pt-BR')}*\n`;
@@ -543,67 +594,117 @@ function renderPDV() {
     ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18 10h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v4H6c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-8c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v4z"/></svg>'
     : '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 17c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm6-9h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h1.9c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v2H6c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-8c0-1.1-.9-2-2-2z"/></svg>';
 
-  const topbar = `<div class="pdv-topbar">
-    <button class="pdv-close" onclick="${state.pdvStep === 'cart' ? 'exitPDV()' : 'pdvBack()'}" ${state.pdvLocked && state.pdvStep === 'cart' ? 'disabled style="opacity:0.3"' : ''}>${state.pdvStep === 'cart' ? '✕' : '‹'}</button>
-    <span class="pdv-title">${state.pdvStep === 'success' ? 'Venda registrada' : 'Modo Venda'}</span>
+  const cartHtml = state.pdvCart.length > 0 ? `
+    <div class="pdv-cart-summary">
+      <div class="pdv-cart-count">${state.pdvCart.reduce((a,i)=>a+(i.qty||1),0)} ${state.pdvCart.reduce((a,i)=>a+(i.qty||1),0) === 1 ? 'item' : 'itens'}</div>
+      <div class="pdv-cart-items-list">
+        ${state.pdvCart.map((item, i) => `
+          <div class="pdv-cart-chip">
+            <span>${(item.qty||1) > 1 ? item.qty+'x ' : ''}${item.description}</span>
+            <button class="pdv-cart-rm" onclick="pdvRemoveItem(${i})">✕</button>
+          </div>`).join('')}
+      </div>
+    </div>` : '';
+
+  const topbar = (backFn, title) => `<div class="pdv-topbar">
+    <button class="pdv-close" onclick="${backFn}" ${state.pdvLocked && backFn === 'exitPDV()' ? 'disabled style="opacity:0.3"' : ''}>${backFn === 'exitPDV()' ? '✕' : '‹'}</button>
+    <span class="pdv-title">${title}</span>
     <button class="pdv-lock ${state.pdvLocked ? 'pdv-locked' : ''}" onclick="togglePDVLock()" ${state.pdvStep === 'success' ? 'style="visibility:hidden"' : ''}>${lockSvg}</button>
   </div>`;
 
-  // ── STEP: CART ──
-  if (state.pdvStep === 'cart') {
-    const total = pdvCartTotal();
-    return `<div class="pdv-overlay">${topbar}
-      <div class="pdv-center">
-        <div class="pdv-total-display">R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-        <div class="pdv-label">${state.pdvCart.length} ${state.pdvCart.length === 1 ? 'item' : 'itens'}</div>
-        ${state.pdvCart.length > 0 ? `<div class="pdv-cart-list">${state.pdvCart.map((item, i) =>
-          `<div class="pdv-cart-item"><span>R$ ${item.value.toLocaleString('pt-BR')}</span><button class="pdv-cart-rm" onclick="pdvRemoveItem(${i})">✕</button></div>`
-        ).join('')}</div>` : ''}
+  // ── STEP: CHOOSE CATEGORY ──
+  if (state.pdvStep === 'choose') {
+    return `<div class="pdv-overlay">
+      ${topbar('exitPDV()', 'Modo Venda')}
+      <div class="pdv-choose-body">
+        <div class="pdv-choose-label">Selecione a categoria</div>
+        <div class="pdv-choose-btns">
+          <button class="pdv-cat-big" onclick="pdvChooseCategory('joia')">💎 Jóia</button>
+          <button class="pdv-cat-big pdv-cat-mk" onclick="pdvChooseCategory('marykay')">💄 Mary Kay</button>
+        </div>
+        ${cartHtml}
       </div>
       <div class="pdv-bottom">
-        <div class="pdv-add-row">
-          <span class="pdv-add-rs">R$</span>
-          <input class="pdv-add-input" id="pdv-input" type="number" inputmode="decimal" placeholder="0,00" onkeydown="if(event.key==='Enter')pdvAddItem()" />
-          <button class="pdv-add-btn" onclick="pdvAddItem()">+</button>
-        </div>
-        ${state.pdvCart.length > 0 ? `<button class="pdv-btn-next" onclick="pdvGoDetails()">Continuar</button>` : ''}
+        ${state.pdvCart.length > 0 ? `<button class="pdv-btn-next" onclick="pdvGoDetails()">Continuar →</button>` : ''}
       </div>
     </div>`;
   }
 
-  // ── STEP: DETAILS ──
-  if (state.pdvStep === 'details') {
-    return `<div class="pdv-overlay">${topbar}
-      <div class="pdv-form">
-        <div class="pdv-value-display">R$ ${pdvCartTotal().toLocaleString('pt-BR')} · ${state.pdvCart.length} ${state.pdvCart.length === 1 ? 'item' : 'itens'}</div>
-        ${state.pdvCart.map((item, i) => `
-          <div class="pdv-detail-card">
-            <div class="pdv-detail-val">R$ ${item.value.toLocaleString('pt-BR')}</div>
-            <div class="pdv-form-group">
-              <label class="pdv-form-label">Descrição</label>
-              <input class="form-input" id="pdv-desc-${i}" placeholder="Nome do produto" value="${item.description}" />
-            </div>
-            <div class="pdv-form-row">
-              <div class="pdv-form-group" style="flex:1">
-                <label class="pdv-form-label">Quantidade</label>
-                <input class="form-input" id="pdv-qty-${i}" type="number" min="1" value="${item.qty || 1}" inputmode="numeric" />
-              </div>
-              <div style="flex:2"></div>
-            </div>
-            <div class="pdv-form-group">
-              <label class="pdv-form-label">Categoria</label>
-              <div class="pdv-toggle-row">
-                <input type="radio" name="pdv-cat-${i}" id="pdv-cat-${i}-joia" value="joia" ${item.category === 'joia' ? 'checked' : ''} class="pdv-toggle-input" />
-                <label for="pdv-cat-${i}-joia" class="pdv-toggle-btn">Jóia</label>
-                <input type="radio" name="pdv-cat-${i}" id="pdv-cat-${i}-mk" value="marykay" ${item.category === 'marykay' ? 'checked' : ''} class="pdv-toggle-input" />
-                <label for="pdv-cat-${i}-mk" class="pdv-toggle-btn">Mary Kay</label>
-              </div>
-            </div>
-          </div>
-        `).join('')}
+  // ── STEP: JOIA SELECT PRODUCT ──
+  if (state.pdvStep === 'joia_select') {
+    return `<div class="pdv-overlay">
+      ${topbar("state.pdvStep='choose';render()", 'Selecionar Jóia')}
+      <div class="pdv-product-list">
+        ${JOIA_PRODUCTS.map(p => `
+          <button class="pdv-product-btn" onclick="pdvAddJoiaWithPrice('${p.name}',${JSON.stringify(p.prices)})">
+            <span class="pdv-product-name">${p.name}</span>
+            <span class="pdv-product-price">${p.prices.length > 1 ? 'R$ ' + p.prices.join(' ou R$ ') : 'R$ ' + p.prices[0]}</span>
+          </button>`).join('')}
+      </div>
+      ${cartHtml}
+    </div>`;
+  }
+
+  // ── STEP: JOIA PRICE CHOICE ──
+  if (state.pdvStep === 'joia_price') {
+    return `<div class="pdv-overlay">
+      ${topbar("state.pdvStep='joia_select';render()", state._pdvJoiaName)}
+      <div class="pdv-choose-body">
+        <div class="pdv-choose-label">Selecione o valor</div>
+        <div class="pdv-choose-btns">
+          ${state._pdvJoiaPrices.map(p => `
+            <button class="pdv-price-opt" onclick="pdvConfirmJoiaPrice(${p})">R$ ${p}</button>
+          `).join('')}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // ── STEP: MARY KAY INPUT ──
+  if (state.pdvStep === 'mk_input') {
+    return `<div class="pdv-overlay">
+      ${topbar("state.pdvStep='choose';render()", 'Produto Mary Kay')}
+      <div class="pdv-choose-body">
+        <div class="pdv-form-group" style="padding:0 20px;margin-top:20px">
+          <label class="pdv-form-label">Nome do produto</label>
+          <input class="form-input" id="pdv-mk-name" placeholder="Ex: Kit Hidratante TimeWise" autofocus />
+        </div>
       </div>
       <div class="pdv-bottom">
-        <button class="pdv-btn-next" onclick="pdvGoPayment()">Continuar</button>
+        <button class="pdv-btn-next" onclick="pdvAddMaryKay()">Adicionar</button>
+      </div>
+      ${cartHtml}
+    </div>`;
+  }
+
+  // ── STEP: DETAILS (prices + qty) ──
+  if (state.pdvStep === 'details') {
+    return `<div class="pdv-overlay">
+      ${topbar('pdvDetailsBack()', 'Valores e quantidades')}
+      <div class="pdv-form">
+        ${state.pdvCart.map((item, i) => `
+          <div class="pdv-detail-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+              <div>
+                <div class="pdv-detail-name">${item.description}</div>
+                <div style="font-size:11px;color:#888;margin-top:2px">${item.category === 'joia' ? 'Jóia' : 'Mary Kay'}</div>
+              </div>
+              <div class="pdv-qty-control">
+                <button class="pdv-qty-btn" onclick="pdvUpdateQty(${i},-1)">−</button>
+                <span class="pdv-qty-num">${item.qty || 1}</span>
+                <button class="pdv-qty-btn" onclick="pdvUpdateQty(${i},1)">+</button>
+              </div>
+            </div>
+            <div class="pdv-form-group" style="margin-bottom:0">
+              <label class="pdv-form-label">Valor unitário</label>
+              <input class="form-input" id="pdv-val-${i}" type="number" inputmode="decimal" value="${item.value || ''}" placeholder="R$" />
+            </div>
+            ${(item.qty || 1) > 1 ? `<div style="font-size:12px;color:#aaa;margin-top:6px;text-align:right">Subtotal: R$ ${(item.value * (item.qty || 1)).toLocaleString('pt-BR')}</div>` : ''}
+          </div>`).join('')}
+        <div class="pdv-detail-total">Total: R$ ${pdvCartTotal().toLocaleString('pt-BR')}</div>
+      </div>
+      <div class="pdv-bottom">
+        <button class="pdv-btn-next" onclick="pdvGoPayment()">Continuar →</button>
       </div>
     </div>`;
   }
@@ -612,7 +713,8 @@ function renderPDV() {
   if (state.pdvStep === 'payment') {
     const selId = state._pdvEditId || state.contacts[0]?.id;
     const opts = state.contacts.map(c => `<option value="${c.id}" ${c.id === selId ? 'selected' : ''}>${c.name}</option>`).join('');
-    return `<div class="pdv-overlay">${topbar}
+    return `<div class="pdv-overlay">
+      ${topbar('pdvPaymentBack()', 'Pagamento')}
       <div class="pdv-form">
         <div class="pdv-value-display">R$ ${pdvCartTotal().toLocaleString('pt-BR')}</div>
         <div class="pdv-form-group">
@@ -682,11 +784,11 @@ function renderPDV() {
   if (state.pdvStep === 'success' && state.pdvResult) {
     const r = state.pdvResult;
     const pv = Math.round(r.total / r.parcels);
-    return `<div class="pdv-overlay">${topbar}
+    return `<div class="pdv-overlay">
+      ${topbar('exitPDV()', 'Venda registrada')}
       <div class="pdv-success-scroll">
         <div class="pdv-success-icon">✓</div>
         <div class="pdv-success-title">Venda registrada!</div>
-
         <div class="pdv-receipt">
           <div class="pdv-receipt-hero">
             <div class="pdv-receipt-day">Dia ${r.day}</div>
@@ -699,16 +801,16 @@ function renderPDV() {
           <div class="pdv-receipt-divider"></div>
           ${r.items.map(item => `
             <div class="pdv-receipt-item">
-              <span>${item.qty > 1 ? item.qty + 'x ' : ''}${item.description}</span>
+              <span>${(item.qty||1) > 1 ? item.qty + 'x ' : ''}${item.description}</span>
               <span class="pdv-receipt-cat">${item.category === 'joia' ? 'Jóia' : 'Mary Kay'}</span>
-              <span>R$ ${item.value.toLocaleString('pt-BR')}</span>
+              <span>R$ ${(item.value * (item.qty||1)).toLocaleString('pt-BR')}</span>
             </div>
           `).join('')}
         </div>
       </div>
       <div class="pdv-bottom" style="display:flex;flex-direction:column;gap:8px">
         <button class="pdv-btn-next" style="background:#25D366" onclick="pdvShareWhatsApp()"><svg width="18" height="18" viewBox="0 0 24 24" fill="white" style="vertical-align:middle;margin-right:6px"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.49a.75.75 0 00.914.914l4.456-1.495A11.952 11.952 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.34 0-4.508-.758-6.26-2.04l-.438-.33-3.222 1.08 1.08-3.222-.33-.438A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>Enviar resumo</button>
-        <button class="pdv-btn-next" style="background:#333" onclick="pdvBack()">Nova venda</button>
+        <button class="pdv-btn-next" style="background:#333" onclick="state.pdvStep='choose';state.pdvCart=[];state.pdvResult=null;render()">Nova venda</button>
       </div>
     </div>`;
   }
