@@ -719,6 +719,7 @@ function renderPDV() {
 // ---------- NAVIGATION ----------
 
 function switchTab(tab) { state.tab = tab; state.detail = null; state.financeDetail = 'recebido'; state.financePeriod = 'mes'; state.financeCustomMonth = null; render(); }
+function goFinance(card) { state.tab = 'financeiro'; state.detail = null; state.financeDetail = card; state.financePeriod = 'mes'; state.financeCustomMonth = null; render(); }
 function updateSearch(v) {
   state.search = v;
   render();
@@ -910,15 +911,15 @@ function renderHome() {
       </div>
 
       <div class="home-stats-row">
-        <div class="home-stat-box">
+        <div class="home-stat-box" onclick="goFinance('recebido')">
           <div class="home-stat-num" style="color:#3B6D11">R$ ${recebidoMes.toLocaleString('pt-BR')}</div>
           <div class="home-stat-label">Recebido</div>
         </div>
-        <div class="home-stat-box">
+        <div class="home-stat-box" onclick="goFinance('a_receber')">
           <div class="home-stat-num" style="color:#993556">R$ ${pendentesMes.toLocaleString('pt-BR')}</div>
           <div class="home-stat-label">A receber</div>
         </div>
-        <div class="home-stat-box" onclick="switchTab('cobrancas')">
+        <div class="home-stat-box" onclick="goFinance('atrasado')">
           <div class="home-stat-num" style="color:#A32D2D">R$ ${atrasadoTotal.toLocaleString('pt-BR')}</div>
           <div class="home-stat-label">Atrasadas (${lateCharges.length})</div>
         </div>
