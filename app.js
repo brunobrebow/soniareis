@@ -478,18 +478,12 @@ function pdvOpenDiscount(i) {
 
 function pdvApplyDiscount() {
   const i = state._pdvDiscountIdx;
-  const type = document.querySelector('input[name="pdv-disc-type"]:checked')?.value;
   const val = parseFloat(document.getElementById('pdv-disc-amount')?.value) || 0;
-  if (!type || val <= 0) { showToast('Insira o valor do desconto', '#A32D2D'); return; }
+  if (val <= 0) { showToast('Insira o valor do desconto', '#A32D2D'); return; }
   const original = state.pdvCart[i]._originalValue || state.pdvCart[i].value;
   state.pdvCart[i]._originalValue = original;
-  if (type === 'percent') {
-    state.pdvCart[i].discount = { type: 'percent', val };
-    state.pdvCart[i].value = Math.round(original * (1 - val / 100));
-  } else {
-    state.pdvCart[i].discount = { type: 'value', val };
-    state.pdvCart[i].value = Math.max(0, original - val);
-  }
+  state.pdvCart[i].discount = { type: 'value', val };
+  state.pdvCart[i].value = Math.max(0, original - val);
   state.modal = null;
   render();
 }
@@ -733,7 +727,7 @@ function renderPDV() {
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
               <button class="pdv-discount-btn" onclick="pdvOpenDiscount(${i})">🏷️ Desconto</button>
-              ${item.discount ? `<span style="font-size:12px;color:#3B6D11">${item.discount.type === 'percent' ? item.discount.val + '%' : 'R$ ' + item.discount.val} de desconto</span>` : ''}
+              ${item.discount ? `<span style="font-size:12px;color:#3B6D11">R$ ${item.discount.val} de desconto</span>` : ''}
             </div>
             ${(item.qty || 1) > 1 ? `<div style="font-size:12px;color:#aaa;margin-top:6px;text-align:right">Subtotal: R$ ${(item.value * (item.qty || 1)).toLocaleString('pt-BR')}</div>` : ''}
           </div>`).join('')}
@@ -747,16 +741,7 @@ function renderPDV() {
           <div class="modal-sheet" onclick="event.stopPropagation()">
             <div class="modal-title">Desconto — ${state.pdvCart[state._pdvDiscountIdx]?.description}</div>
             <div class="form-group">
-              <label class="form-label">Tipo de desconto</label>
-              <div class="pdv-toggle-row" style="margin-bottom:12px">
-                <input type="radio" name="pdv-disc-type" id="pdv-disc-pct" value="percent" checked class="pdv-toggle-input" />
-                <label for="pdv-disc-pct" class="pdv-toggle-btn">%</label>
-                <input type="radio" name="pdv-disc-type" id="pdv-disc-val" value="value" class="pdv-toggle-input" />
-                <label for="pdv-disc-val" class="pdv-toggle-btn">R$</label>
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Valor do desconto</label>
+              <label class="form-label">Valor do desconto (R$)</label>
               <input class="form-input" id="pdv-disc-amount" type="number" inputmode="decimal" placeholder="Ex: 10" />
             </div>
             <button class="btn-primary" onclick="pdvApplyDiscount()">Aplicar desconto</button>
