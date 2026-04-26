@@ -382,6 +382,7 @@ function enterPDV() {
   state.modal = null;
   state._pdvCatChoice = null;
   state._pdvSelectedContact = null;
+  state._pdvTotalDiscount = 0;
   document.querySelector('meta[name="theme-color"]').content = '#111111';
   render();
 }
@@ -560,18 +561,24 @@ async function pdvSaveEditContact() {
 async function pdvSubmit() {
   const contactId = document.getElementById('pdv-contact')?.value;
   const parcels = parseInt(document.getElementById('pdv-parcels')?.value);
-  const day = parseInt(document.getElementById('pdv-day')?.value) || 28;
+  const day = parseInt(document.getElementById('pdv-day')?.value);
   const method = document.querySelector('input[name="pdv-method"]:checked')?.value || 'pix';
+  const totalDiscount = parseFloat(document.getElementById('pdv-total-discount')?.value) || 0;
   if (!contactId) { showToast('Selecione a cliente', '#A32D2D'); return; }
   if (!parcels) { showToast('Selecione o número de parcelas', '#A32D2D'); return; }
+  if (!day) { showToast('Selecione o dia de cobrança', '#A32D2D'); return; }
 
   const contact = getContact(contactId);
   const items = [];
-  const total = pdvCartTotal();
+  const subtotal = pdvCartTotal();
+  const total = Math.max(0, subtotal - totalDiscount);
 
   try {
     for (const item of state.pdvCart) {
-      const itemTotal = item.value * (item.qty || 1);
+      const itemSubtotal = item.value * (item.qty || 1);
+      // Apply discount proportionally
+      const itemDiscount = subtotal > 0 ? Math.round(totalDiscount * (itemSubtotal / subtotal)) : 0;
+      const itemTotal = Math.max(0, itemSubtotal - itemDiscount);
       const descWithQty = (item.qty || 1) > 1 ? `${item.qty}x ${item.description}` : item.description;
       const newSale = await DB.addSale({
         contact_id: contactId,
@@ -589,7 +596,7 @@ async function pdvSubmit() {
       items.push({ ...item, total: itemTotal, parcel_value: Math.round(itemTotal / parcels) });
     }
 
-    state.pdvResult = { items, contact, parcels, day, method, total };
+    state.pdvResult = { items, contact, parcels, day, method, total, discount: totalDiscount };
     state.pdvStep = 'success';
     render();
   } catch (e) {
@@ -606,7 +613,9 @@ function pdvShareWhatsApp() {
   r.items.forEach(item => {
     msg += `• ${item.qty > 1 ? item.qty + 'x ' : ''}${item.description} (${item.category === 'joia' ? 'Jóia' : 'Mary Kay'}) — R$ ${(item.value * (item.qty || 1)).toLocaleString('pt-BR')}\n`;
   });
-  msg += `\n*Total: R$ ${r.total.toLocaleString('pt-BR')}*\n`;
+  msg += `\n`;
+  if (r.discount > 0) msg += `Desconto: - R$ ${r.discount.toLocaleString('pt-BR')}\n`;
+  msg += `*Total: R$ ${r.total.toLocaleString('pt-BR')}*\n`;
   msg += `*${r.parcels}x de R$ ${parcelVal.toLocaleString('pt-BR')}*\n`;
   msg += `Vencimento: todo dia ${r.day}\n`;
   msg += `Pagamento: ${r.method === 'pix' ? 'Pix' : 'Cartão'}\n\n`;
@@ -779,8 +788,15 @@ function renderPDV() {
           </div>
           <div class="pdv-form-group" style="flex:1">
             <label class="pdv-form-label">Dia cobrança</label>
-            <input class="form-input" id="pdv-day" type="number" value="28" min="1" max="31" />
+            <select class="form-input" id="pdv-day">
+              <option value="" disabled selected>—</option>
+              ${Array.from({length:31},(_,i)=>`<option value="${i+1}">${i+1}</option>`).join('')}
+            </select>
           </div>
+        </div>
+        <div class="pdv-form-group">
+          <label class="pdv-form-label">Desconto na venda (R$)</label>
+          <input class="form-input" id="pdv-total-discount" type="number" inputmode="decimal" placeholder="Valor do desconto" value="${state._pdvTotalDiscount || ''}" />
         </div>
         <div class="pdv-form-group">
           <label class="pdv-form-label">Forma de pagamento</label>
@@ -840,6 +856,7 @@ function renderPDV() {
           </div>
           <div class="pdv-receipt-divider"></div>
           <div class="pdv-receipt-row"><span>Cliente</span><span>${r.contact.name}</span></div>
+          ${r.discount > 0 ? `<div class="pdv-receipt-row"><span>Desconto</span><span style="color:#3B6D11">- R$ ${r.discount.toLocaleString('pt-BR')}</span></div>` : ''}
           <div class="pdv-receipt-row"><span>Total</span><span>R$ ${r.total.toLocaleString('pt-BR')}</span></div>
           <div class="pdv-receipt-row"><span>Pagamento</span><span>${r.method === 'pix' ? 'Pix' : 'Cartão'}</span></div>
           <div class="pdv-receipt-divider"></div>
