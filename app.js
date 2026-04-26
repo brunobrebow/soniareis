@@ -1052,14 +1052,25 @@ function sendContactResumo(contactId) {
     return;
   }
 
-  let msg = `*Resumo financeiro — ${c.name}*\n\n`;
+  // Sum all next pending parcels (what she pays this month)
+  let totalMensal = 0;
+  const days = new Set();
   pendingSales.forEach(s => {
     const parcels = getSaleParcels(s);
     const nextPending = parcels.find(p => !p.paid);
-    if (!nextPending) return;
-    const remaining = nextPending.remaining || nextPending.amount;
-    msg += `Valor da parcela: *R$ ${remaining}*\nVencimento todo dia: *${s.start_day}*\n\n`;
+    if (nextPending) {
+      totalMensal += (nextPending.remaining || nextPending.amount);
+      days.add(s.start_day);
+    }
   });
+
+  let msg = `*Resumo financeiro — ${c.name}*\n\n`;
+  msg += `Valor da parcela: *R$ ${totalMensal}*\n`;
+  if (days.size === 1) {
+    msg += `Vencimento todo dia: *${[...days][0]}*`;
+  } else {
+    msg += `Vencimentos: dias *${[...days].sort((a,b)=>a-b).join(', ')}*`;
+  }
 
   const url = `https://wa.me/${c.phone}?text=${encodeURIComponent(msg)}`;
   window.open(url, '_blank');
