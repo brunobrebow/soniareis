@@ -212,6 +212,8 @@ body {
 .info-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid #f9f9f9; }
 .info-label { font-size: 14px; color: #888; }
 .info-value { font-size: 14px; color: #1a1a1a; font-weight: 500; }
+.transaction-group { background: #fff; border: 1px solid #f0f0f0; border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+.transaction-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px; border-bottom: 1px solid #f0f0f0; }
 .sale-item { background: #f9f9f9; border-radius: 12px; padding: 12px; margin-bottom: 10px; }
 .sale-desc { font-size: 15px; font-weight: 600; color: #1a1a1a; }
 .sale-meta { font-size: 12px; color: #aaa; margin-top: 4px; }

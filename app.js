@@ -205,7 +205,12 @@ function getDueCharges(filter) {
 
 function getWhatsappMsg(contact, parcel, sale) {
   const firstName = contact.name.split(' ')[0];
-  return `Olá ${firstName}! Esta é uma mensagem de cobrança referente à parcela que vence hoje, dia ${parcel.dateStr}, no valor de R$ ${parcel.amount},00.\n\nCaso queira pagar por Pix, utilize a chave: ${CONFIG.pix}\n\nApós o pagamento, por favor me envie o comprovante. Obrigada! 💖`;
+  let msg = `Olá ${firstName}! Esta é uma mensagem de cobrança referente à parcela que vence hoje, dia ${parcel.dateStr}, no valor de R$ ${parcel.amount},00.`;
+  if (sale.payment_method === 'pix' || !sale.payment_method) {
+    msg += `\n\nPagamento: Pix\nNome do Pix: ${CONFIG.pixNome}\nChave PIX celular: ${CONFIG.pixChave}`;
+  }
+  msg += `\n\nApós o pagamento, por favor me envie o comprovante. Obrigada! 💖`;
+  return msg;
 }
 
 function showToast(msg, color = '#3B6D11') {
@@ -657,7 +662,11 @@ function pdvShareWhatsApp() {
   msg += `*Total: R$ ${r.total.toLocaleString('pt-BR')}*\n`;
   msg += r.isAberto ? `*Em aberto*\n` : `*${r.parcels}x de R$ ${parcelVal.toLocaleString('pt-BR')}*\n`;
   msg += `Vencimento: todo dia ${r.day}\n`;
-  msg += `Pagamento: ${r.method === 'pix' ? 'Pix' : 'Cartão'}\n\n`;
+  if (r.method === 'pix') {
+    msg += `Pagamento: Pix\n\nNome do Pix: ${CONFIG.pixNome}\nChave PIX celular: ${CONFIG.pixChave}\n\n`;
+  } else {
+    msg += `Pagamento: Cartão\n\n`;
+  }
   msg += `Obrigada pela compra! 💖`;
   const url = `https://wa.me/${r.contact.phone}?text=${encodeURIComponent(msg)}`;
   window.open(url, '_blank');
@@ -1107,6 +1116,37 @@ function sendContactSummary(contactId) {
   const url = `https://wa.me/${c.phone}?text=${encodeURIComponent(msg)}`;
   window.open(url, '_blank');
 }
+function sendTransactionSummary(contactId, saleIdsStr) {
+  const c = getContact(contactId);
+  if (!c) return;
+  const saleIds = saleIdsStr.split(',');
+  const txSales = saleIds.map(id => state.sales.find(s => s.id === id)).filter(Boolean);
+  if (txSales.length === 0) return;
+
+  const total = txSales.reduce((a, s) => a + s.total, 0);
+  const method = txSales[0].payment_method || 'pix';
+  const parcelsNum = txSales[0].parcels;
+  const day = txSales[0].start_day;
+  const parcelVal = Math.round(total / parcelsNum);
+
+  let msg = `*Resumo da compra*\n\n`;
+  txSales.forEach(s => {
+    msg += `• ${s.description} (${s.category === 'joia' ? 'Jóia' : 'Mary Kay'}) — R$ ${s.total.toLocaleString('pt-BR')}\n`;
+  });
+  msg += `\n*Total: R$ ${total.toLocaleString('pt-BR')}*\n`;
+  msg += parcelsNum === 1 && txSales[0].parcels === 1 ? `*Em aberto*\n` : `*${parcelsNum}x de R$ ${parcelVal.toLocaleString('pt-BR')}*\n`;
+  msg += `Vencimento: todo dia ${day}\n`;
+  if (method === 'pix') {
+    msg += `Pagamento: Pix\n\nNome do Pix: ${CONFIG.pixNome}\nChave PIX celular: ${CONFIG.pixChave}\n\n`;
+  } else {
+    msg += `Pagamento: Cartão\n\n`;
+  }
+  msg += `Obrigada pela compra! 💖`;
+
+  const url = `https://wa.me/${c.phone}?text=${encodeURIComponent(msg)}`;
+  window.open(url, '_blank');
+}
+
 function openModal(m, extra) { state.modal = m; state.modalExtra = extra || null; render(); }
 function closeModal() { state.modal = null; state.chargeModal = null; state.paidModal = null; state.deleteContactModal = null; render(); setTimeout(lockScroll, 100); setTimeout(lockScroll, 300); }
 function setChargeFilter(f) { state.chargeFilter = f; render(); }
@@ -1719,27 +1759,58 @@ function renderDetail(contactId) {
         </div>
       </div>
       <div class="detail-section">
-        <h3>Vendas e parcelas</h3>
+        <h3>Compras</h3>
         ${cSales.length === 0 ? '<div style="color:#aaa;font-size:14px;padding:8px 0">Nenhuma venda registrada.</div>' : ''}
-        ${cSales.map(s => {
-          const parcels = getSaleParcels(s);
-          return `
-            <div class="sale-item">
-              <div class="sale-desc">${s.description}</div>
-              <div class="sale-meta">Total: R$ ${s.total} · ${s.parcels}x R$ ${s.parcel_value} · ${s.payment_method === 'pix' ? 'Pix' : 'Cartão'}</div>
-              <div style="margin-top:10px">
-                ${parcels.map(p => `
-                  <div class="parcel-row">
-                    <span class="parcel-num">Parc. ${p.index + 1}</span>
-                    <span class="parcel-date">${p.dateStr}</span>
-                    <div class="parcel-status">
-                      <span class="badge ${p.paid ? 'badge-ok' : 'badge-due'}">${p.paid ? 'Pago' : 'Pendente'}</span>
-                      ${!p.paid ? `<button style="background:none;border:none;cursor:pointer;font-size:12px;color:#D4537E;padding:0" onclick="openPaidModal('${s.id}',${p.index})">Registrar</button>` : ''}
-                    </div>
-                  </div>`).join('')}
-              </div>
-            </div>`;
-        }).join('')}
+        ${(() => {
+          // Group sales by transaction (same minute)
+          const groups = [];
+          const sorted = [...cSales].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+          sorted.forEach(s => {
+            const t = new Date(s.created_at);
+            const key = `${t.getFullYear()}-${t.getMonth()}-${t.getDate()}-${t.getHours()}-${t.getMinutes()}`;
+            let group = groups.find(g => g.key === key);
+            if (!group) {
+              const mesesAbr = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+              group = { key, date: `${t.getDate()}/${mesesAbr[t.getMonth()]}/${t.getFullYear()}`, sales: [], ids: [] };
+              groups.push(group);
+            }
+            group.sales.push(s);
+            group.ids.push(s.id);
+          });
+          return groups.map(g => {
+            const gTotal = g.sales.reduce((a, s) => a + s.total, 0);
+            const method = g.sales[0]?.payment_method || 'pix';
+            return `
+              <div class="transaction-group">
+                <div class="transaction-header">
+                  <div>
+                    <div style="font-size:13px;color:#888">${g.date} · ${g.sales.length} ${g.sales.length === 1 ? 'item' : 'itens'}</div>
+                    <div style="font-size:16px;font-weight:600;color:#1a1a1a;margin-top:2px">R$ ${gTotal.toLocaleString('pt-BR')}</div>
+                  </div>
+                  <button onclick="sendTransactionSummary('${c.id}','${g.ids.join(',')}')" style="background:#25D366;border:none;border-radius:8px;color:white;font-size:11px;padding:6px 10px;cursor:pointer;white-space:nowrap">📩 Enviar</button>
+                </div>
+                ${g.sales.map(s => {
+                  const parcels = getSaleParcels(s);
+                  return `
+                    <div class="sale-item" style="margin-top:8px">
+                      <div class="sale-desc">${s.description}</div>
+                      <div class="sale-meta">R$ ${s.total} · ${s.parcels}x R$ ${s.parcel_value} · ${s.payment_method === 'pix' ? 'Pix' : 'Cartão'}</div>
+                      <div style="margin-top:8px">
+                        ${parcels.map(p => `
+                          <div class="parcel-row">
+                            <span class="parcel-num">Parc. ${p.index + 1}</span>
+                            <span class="parcel-date">${p.dateStr}</span>
+                            <div class="parcel-status">
+                              <span class="badge ${p.paid ? 'badge-ok' : 'badge-due'}">${p.paid ? 'Pago' : 'Pendente'}</span>
+                              ${!p.paid ? `<button style="background:none;border:none;cursor:pointer;font-size:12px;color:#D4537E;padding:0" onclick="openPaidModal('${s.id}',${p.index})">Registrar</button>` : ''}
+                            </div>
+                          </div>`).join('')}
+                      </div>
+                    </div>`;
+                }).join('')}
+              </div>`;
+          }).join('');
+        })()}
         <button onclick="openModal('addSale','${contactId}')" style="width:100%;padding:12px;background:none;border:1px solid #D4537E;border-radius:10px;color:#D4537E;font-size:14px;cursor:pointer;margin-top:4px">+ Nova venda</button>
       </div>
       <button class="btn-delete-contact" onclick="openDeleteContactModal('${c.id}')">Excluir cliente</button>
