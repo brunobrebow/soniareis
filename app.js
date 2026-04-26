@@ -1732,7 +1732,8 @@ function renderFinanceiro() {
         date: p.paid_at ? new Date(p.paid_at).toLocaleDateString('pt-BR') : '—',
         value: p.paid_amount || sale.parcel_value,
         color: '#3B6D11',
-        prefix: '+'
+        prefix: '+',
+        sale, contact
       });
     });
     transactions.sort((a, b) => new Date(b.date.split('/').reverse().join('-')) - new Date(a.date.split('/').reverse().join('-')));
