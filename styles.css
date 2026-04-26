@@ -377,6 +377,7 @@ body {
 .fin-tx-value { font-size: 15px; font-weight: 600; }
 .fin-tx-date { font-size: 11px; color: #aaa; margin-top: 2px; }
 .fin-tx-cobrar { margin-top: 4px; padding: 4px 10px; background: #25D366; border: none; border-radius: 6px; color: white; font-size: 11px; font-weight: 500; cursor: pointer; }
+.fin-tx-undo { margin-top: 4px; padding: 4px 10px; background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 6px; color: #A32D2D; font-size: 11px; font-weight: 500; cursor: pointer; }
 .empty-state { text-align: center; padding: 48px 20px; color: #bbb; font-size: 14px; line-height: 1.6; }
 .spinner { width: 32px; height: 32px; border: 3px solid #f0f0f0; border-top-color: #D4537E; border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

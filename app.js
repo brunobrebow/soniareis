@@ -235,6 +235,7 @@ function getSaleParcels(sale) {
       paid: payment?.paid || false,
       amount: sale.parcel_value,
       paidAmount,
+      paidAt: payment?.paid_at || null,
       remaining
     };
   });
@@ -1319,7 +1320,7 @@ function openGroupPayment(contactId) {
       }
     });
   });
-  state._groupPayment = { contactId, contactName: contact.name, totalPending, pendingParcels };
+  state._groupPayment = { contactId, contactName: contact.name, totalPending, pendingParcels: pendingParcels.sort((a, b) => a.parcelIndex - b.parcelIndex) };
   state.modal = 'groupPayment';
   render();
 }
@@ -1330,23 +1331,22 @@ async function confirmGroupPayment() {
   const gp = state._groupPayment;
   if (!gp) return;
 
-  const amount = Math.min(val, gp.totalPending);
-  const parcels = gp.pendingParcels;
+  const amount = Math.min(Math.round(val), gp.totalPending);
+  const parcels = [...gp.pendingParcels]; // sorted oldest first from openGroupPayment
+  const payTimestamp = new Date().toISOString();
 
   try {
-    // Distribute payment: divide equally with rounding, last parcel gets remainder
+    // FIFO: pay oldest parcels first until money runs out
     let leftover = amount;
-    const basePerParcel = Math.floor(amount / parcels.length);
 
-    for (let i = 0; i < parcels.length; i++) {
-      const p = parcels[i];
+    for (const p of parcels) {
+      if (leftover <= 0) break;
       const payment = state.payments.find(pm => pm.sale_id === p.saleId && pm.parcel_index === p.parcelIndex);
       const sale = state.sales.find(s => s.id === p.saleId);
       if (!payment || !sale) continue;
 
       const parcelRemaining = Math.round(sale.parcel_value - (payment.paid_amount || 0));
-      // Last parcel gets whatever is left to avoid rounding errors
-      const payAmount = Math.round(Math.min(i === parcels.length - 1 ? leftover : basePerParcel, parcelRemaining));
+      const payAmount = Math.min(leftover, parcelRemaining);
       if (payAmount <= 0) continue;
       leftover -= payAmount;
 
@@ -1356,7 +1356,7 @@ async function confirmGroupPayment() {
       await DB.markPaid(p.saleId, p.parcelIndex, totalPaid, isFullPayment);
       payment.paid_amount = totalPaid;
       if (isFullPayment) payment.paid = true;
-      payment.paid_at = new Date().toISOString();
+      payment.paid_at = payTimestamp;
     }
 
     const isFullPayment = amount >= gp.totalPending;
@@ -1367,7 +1367,10 @@ async function confirmGroupPayment() {
       const newRemaining = Math.round(gp.totalPending - amount);
       state._reminderContactId = gp.contactId;
       state._reminderGroupRemaining = newRemaining;
-      state._reminderParcels = parcels;
+      state._reminderParcels = parcels.filter(p => {
+        const pm = state.payments.find(pm2 => pm2.sale_id === p.saleId && pm2.parcel_index === p.parcelIndex);
+        return pm && !pm.paid;
+      });
       state.modal = 'groupReminderDays';
     }
 
@@ -1392,6 +1395,44 @@ function confirmGroupReminder() {
   }
   closeModal();
   showToast(`Lembrete em ${days} dia${days > 1 ? 's' : ''}`);
+}
+
+async function undoPayments(paymentIdsStr) {
+  const ids = paymentIdsStr.split(',');
+  if (!confirm(`Desfazer ${ids.length} pagamento${ids.length > 1 ? 's' : ''}?`)) return;
+  try {
+    for (const id of ids) {
+      await DB.undoPayment(id);
+      const pm = state.payments.find(p => p.id === id);
+      if (pm) {
+        pm.paid = false;
+        pm.paid_at = null;
+        pm.paid_amount = 0;
+      }
+    }
+    showToast('Pagamento desfeito!');
+    render();
+  } catch (e) {
+    showToast('Erro ao desfazer.', '#A32D2D');
+    console.error(e);
+  }
+}
+
+async function undoParcelPayment(saleId, parcelIndex) {
+  if (!confirm('Desfazer este pagamento?')) return;
+  const pm = state.payments.find(p => p.sale_id === saleId && p.parcel_index === parcelIndex);
+  if (!pm) return;
+  try {
+    await DB.undoPayment(pm.id);
+    pm.paid = false;
+    pm.paid_at = null;
+    pm.paid_amount = 0;
+    showToast('Pagamento desfeito!');
+    render();
+  } catch (e) {
+    showToast('Erro ao desfazer.', '#A32D2D');
+    console.error(e);
+  }
 }
 function selectFinanceCard(key) { state.financeDetail = key; render(); }
 function setFinancePeriod(p) {
@@ -1830,18 +1871,32 @@ function renderFinanceiro() {
 
   if (sel === 'recebido') {
     listTitle = 'Pagamentos recebidos';
+    // Group payments by contact + timestamp (same minute = same payment event)
+    const paymentGroups = {};
     paidInPeriod.forEach(p => {
       const sale = state.sales.find(s => s.id === p.sale_id);
       if (!sale) return;
       const contact = getContact(sale.contact_id);
+      const ts = p.paid_at ? new Date(p.paid_at) : new Date();
+      const groupKey = `${sale.contact_id}-${ts.getFullYear()}-${ts.getMonth()}-${ts.getDate()}-${ts.getHours()}-${ts.getMinutes()}`;
+      if (!paymentGroups[groupKey]) {
+        paymentGroups[groupKey] = { contact, date: ts, total: 0, payments: [], sales: [] };
+      }
+      paymentGroups[groupKey].total += Math.round(p.paid_amount || sale.parcel_value);
+      paymentGroups[groupKey].payments.push(p);
+      paymentGroups[groupKey].sales.push(sale);
+    });
+    Object.values(paymentGroups).forEach(g => {
+      const descs = [...new Set(g.sales.map(s => s.description))];
       transactions.push({
-        name: contact?.name?.split(' ').slice(0, 2).join(' ') || '—',
-        desc: sale.description,
-        date: p.paid_at ? new Date(p.paid_at).toLocaleDateString('pt-BR') : '—',
-        value: p.paid_amount || sale.parcel_value,
+        name: g.contact?.name?.split(' ').slice(0, 2).join(' ') || '—',
+        desc: descs.length <= 2 ? descs.join(', ') : descs.slice(0, 2).join(', ') + ` +${descs.length - 2}`,
+        date: g.date.toLocaleDateString('pt-BR'),
+        value: g.total,
         color: '#3B6D11',
         prefix: '+',
-        sale, contact
+        sale: g.sales[0], contact: g.contact,
+        paymentGroup: g.payments
       });
     });
     transactions.sort((a, b) => new Date(b.date.split('/').reverse().join('-')) - new Date(a.date.split('/').reverse().join('-')));
@@ -1905,27 +1960,31 @@ function renderFinanceiro() {
       <div class="upcoming-list">
         ${transactions.length === 0 ? '<div class="empty-state" style="padding:20px">Nenhuma transação neste período.</div>' : ''}
         ${transactions.map(t => {
-          let cobrarHtml = '';
-          if (t.actionable && t.contact && t.sale) {
+          let actionHtml = '';
+          if (t.paymentGroup) {
+            // Recebido: show undo button
+            const pids = t.paymentGroup.map(p => p.id).join(',');
+            actionHtml = '<button class="fin-tx-undo" onclick="undoPayments(\'' + pids + '\')">Desfazer</button>';
+          } else if (t.actionable && t.contact && t.sale) {
             const isCard = t.sale.payment_method === 'cartao';
             if (!isCard) {
               const msg = getWhatsappMsg(t.contact, t.parcel, t.sale);
               const url = 'https://wa.me/' + t.contact.phone + '?text=' + encodeURIComponent(msg);
-              cobrarHtml = '<button class="fin-tx-cobrar" onclick="openWppAndMark(\'' + url + '\',\'' + t.sale.id + '\',' + t.parcel.index + ')">Cobrar</button>';
+              actionHtml = '<button class="fin-tx-cobrar" onclick="openWppAndMark(\'' + url + '\',\'' + t.sale.id + '\',' + t.parcel.index + ')">Cobrar</button>';
             } else {
-              cobrarHtml = '<span style="font-size:11px;color:#aaa">💳</span>';
+              actionHtml = '<span style="font-size:11px;color:#aaa">💳</span>';
             }
           }
           return `
             <div class="fin-transaction">
-              <div class="fin-tx-left" ${t.contact ? 'onclick="state.modal=\'finDetail\';state.modalExtra=\'' + t.sale.id + '\';render()" style="cursor:pointer"' : ''}>
+              <div class="fin-tx-left" ${t.sale ? 'onclick="state.modal=\'finDetail\';state.modalExtra=\'' + t.sale.id + '\';render()" style="cursor:pointer"' : ''}>
                 <div class="fin-tx-name">${t.name}</div>
                 <div class="fin-tx-desc">${t.desc}</div>
               </div>
               <div class="fin-tx-right">
                 <div class="fin-tx-value" style="color:${t.color}">${t.prefix}R$ ${t.value.toLocaleString('pt-BR')}</div>
                 <div class="fin-tx-date">${t.date}</div>
-                ${cobrarHtml}
+                ${actionHtml}
               </div>
             </div>`;
         }).join('')}
@@ -2053,7 +2112,7 @@ function renderDetail(contactId) {
                             <span class="parcel-date">${p.dateStr}</span>
                             <div class="parcel-status">
                               <span class="badge ${p.paid ? 'badge-ok' : 'badge-due'}">${p.paid ? 'Pago' : 'Pendente'}</span>
-                              ${!p.paid ? `<button style="background:none;border:none;cursor:pointer;font-size:12px;color:#D4537E;padding:0" onclick="openPaidModal('${s.id}',${p.index})">Registrar</button>` : ''}
+                              ${!p.paid ? `<button style="background:none;border:none;cursor:pointer;font-size:12px;color:#D4537E;padding:0" onclick="openPaidModal('${s.id}',${p.index})">Registrar</button>` : `<button style="background:none;border:none;cursor:pointer;font-size:11px;color:#A32D2D;padding:0" onclick="undoParcelPayment('${s.id}',${p.index})">Desfazer</button>`}
                             </div>
                           </div>`).join('')}
                       </div>

@@ -121,4 +121,15 @@ const DB = {
     return data;
   },
 
+  async undoPayment(paymentId) {
+    const { data, error } = await getClient()
+      .from('payments')
+      .update({ paid: false, paid_at: null, paid_amount: 0 })
+      .eq('id', paymentId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
 };
