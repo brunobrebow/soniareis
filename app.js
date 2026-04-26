@@ -218,7 +218,6 @@ function getWhatsappMsg(contact, parcel, sale) {
     msg += `Estou enviando o valor do seu pix de hoje!\n\n`;
     msg += `Valor a pagar hoje: R$ ${remaining}\n`;
   }
-  msg += `Parcelas restantes: ${pendingCount}\n`;
   msg += `Vencimento todo dia: ${sale.start_day}\n\n`;
   msg += `Nome do Pix: ${CONFIG.pixNome}\nChave PIX celular: ${CONFIG.pixChave}\n\n`;
   msg += `Obrigada! 💖`;
