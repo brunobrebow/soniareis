@@ -1061,12 +1061,6 @@ function renderHome() {
           </div>`;
       })()}
 
-      <div class="home-section-title">Ações rápidas</div>
-      <div class="home-actions">
-        <div class="home-action-btn" onclick="switchTab('contatos');setTimeout(()=>openModal('addContact'),100)">
-          <span>＋</span> Nova cliente
-        </div>
-      </div>
       <div style="padding:0 16px 20px">
         <button class="home-pdv-btn" onclick="enterPDV()">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> Modo Venda
