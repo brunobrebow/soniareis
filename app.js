@@ -881,8 +881,11 @@ function renderHome() {
         <div class="home-progress-bg">
           <div class="home-progress-fill" style="width:${Math.min(100, Math.round(vendasMes / state.metaMensal * 100))}%"></div>
         </div>
+        <div class="home-progress-bg" style="margin-top:4px">
+          <div class="home-progress-fill home-progress-day" style="width:${Math.round(diaNum / new Date(anoAtual, mesAtual + 1, 0).getDate() * 100)}%"></div>
+        </div>
         <div class="home-card-row" style="margin-top:4px">
-          <span class="home-card-sub">${Math.round(vendasMes / state.metaMensal * 100)}% da meta</span>
+          <span class="home-card-sub">${Math.round(vendasMes / state.metaMensal * 100)}% da meta · dia ${diaNum}/${new Date(anoAtual, mesAtual + 1, 0).getDate()}</span>
           <span class="home-card-sub home-meta-link" onclick="setMeta()">Redefinir meta</span>
         </div>
       </div>
