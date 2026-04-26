@@ -1046,26 +1046,20 @@ function sendContactResumo(contactId) {
   const c = getContact(contactId);
   if (!c) return;
   const cSales = state.sales.filter(s => s.contact_id === contactId);
-
-  // Get pending parcels grouped by sale
   const pendingSales = cSales.filter(s => getSaleParcels(s).some(p => !p.paid));
   if (pendingSales.length === 0) {
     showToast('Nenhuma parcela pendente!', '#3B6D11');
     return;
   }
 
-  let msg = `Oiiii😍\nTudo bem?\nSegue o resumo das suas parcelas:\n\n`;
-
+  let msg = `*Resumo financeiro — ${c.name}*\n\n`;
   pendingSales.forEach(s => {
     const parcels = getSaleParcels(s);
     const nextPending = parcels.find(p => !p.paid);
     if (!nextPending) return;
     const remaining = nextPending.remaining || nextPending.amount;
-    msg += `📌 Pagar todo dia *${s.start_day}*\nValor da parcela: *R$ ${remaining}*\n\n`;
+    msg += `Valor da parcela: *R$ ${remaining}*\nVencimento todo dia: *${s.start_day}*\n\n`;
   });
-
-  msg += `Nome do Pix: ${CONFIG.pixNome}\nChave PIX celular: ${CONFIG.pixChave}\n\n`;
-  msg += `Qualquer dúvida é só me chamar! 💖`;
 
   const url = `https://wa.me/${c.phone}?text=${encodeURIComponent(msg)}`;
   window.open(url, '_blank');
