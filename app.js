@@ -525,6 +525,18 @@ async function pdvAddContact() {
   } catch (e) { showToast('Erro ao salvar.', '#A32D2D'); }
 }
 
+function pdvUpdateDiscountSummary() {
+  const disc = parseFloat(document.getElementById('pdv-total-discount')?.value) || 0;
+  const sub = pdvCartTotal();
+  const el = document.getElementById('pdv-disc-summary');
+  if (!el) return;
+  if (disc > 0) {
+    el.innerHTML = `<div style="font-size:13px;color:#3B6D11;margin-top:6px">Desconto: - R$ ${disc.toLocaleString('pt-BR')}</div><div style="font-size:14px;color:#888;margin-top:8px">Total</div><div style="font-size:26px;font-weight:700;color:#fff">R$ ${Math.max(0, sub - disc).toLocaleString('pt-BR')}</div>`;
+  } else {
+    el.innerHTML = '';
+  }
+}
+
 function pdvUpdatePhone() {
   const sel = document.getElementById('pdv-contact');
   const display = document.getElementById('pdv-phone-display');
@@ -775,7 +787,11 @@ function renderPDV() {
     return `<div class="pdv-overlay">
       ${topbar('pdvPaymentBack()', 'Pagamento')}
       <div class="pdv-form">
-        <div class="pdv-value-display">R$ ${pdvCartTotal().toLocaleString('pt-BR')}</div>
+        <div class="pdv-value-display" id="pdv-payment-summary">
+          <div style="font-size:14px;color:#888">Subtotal</div>
+          <div style="font-size:22px;font-weight:700;color:#fff">R$ ${pdvCartTotal().toLocaleString('pt-BR')}</div>
+          <div id="pdv-disc-summary"></div>
+        </div>
         <div class="pdv-form-group">
           <label class="pdv-form-label">Cliente *</label>
           <select class="form-input ${!selId ? 'pdv-field-required' : ''}" id="pdv-contact" onchange="state._pdvSelectedContact=this.value;pdvUpdatePhone();render()">${opts}</select>
@@ -804,7 +820,7 @@ function renderPDV() {
         </div>
         <div class="pdv-form-group">
           <label class="pdv-form-label">Desconto na venda (R$)</label>
-          <input class="form-input" id="pdv-total-discount" type="number" inputmode="decimal" placeholder="Valor do desconto" value="${state._pdvTotalDiscount || ''}" />
+          <input class="form-input" id="pdv-total-discount" type="number" inputmode="decimal" placeholder="Valor do desconto" value="${state._pdvTotalDiscount || ''}" oninput="pdvUpdateDiscountSummary()" />
         </div>
         <div class="pdv-form-group">
           <label class="pdv-form-label">Forma de pagamento</label>
