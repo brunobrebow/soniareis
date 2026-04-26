@@ -637,12 +637,23 @@ function pdvShareWhatsApp() {
   const r = state.pdvResult;
   if (!r) return;
   const parcelVal = Math.round(r.total / r.parcels);
+  const rawSub = r.items.reduce((a, i) => a + i.value * (i.qty || 1), 0);
+  const itemDiscTotal = r.items.reduce((a, i) => a + (i.itemDiscount || 0), 0);
+  const hasDiscount = itemDiscTotal > 0 || r.discount > 0;
   let msg = `*Resumo da compra*\n\n`;
   r.items.forEach(item => {
-    msg += `• ${item.qty > 1 ? item.qty + 'x ' : ''}${item.description} (${item.category === 'joia' ? 'Jóia' : 'Mary Kay'}) — R$ ${(item.value * (item.qty || 1)).toLocaleString('pt-BR')}\n`;
+    const itemGross = item.value * (item.qty || 1);
+    msg += `• ${item.qty > 1 ? item.qty + 'x ' : ''}${item.description} (${item.category === 'joia' ? 'Jóia' : 'Mary Kay'}) — R$ ${itemGross.toLocaleString('pt-BR')}\n`;
+    if (item.itemDiscount > 0) {
+      msg += `  _Desconto: - R$ ${item.itemDiscount.toLocaleString('pt-BR')}_\n`;
+    }
   });
   msg += `\n`;
-  if (r.discount > 0) msg += `Desconto: - R$ ${r.discount.toLocaleString('pt-BR')}\n`;
+  if (hasDiscount) {
+    msg += `Subtotal: R$ ${rawSub.toLocaleString('pt-BR')}\n`;
+    if (itemDiscTotal > 0) msg += `Desc. produtos: - R$ ${itemDiscTotal.toLocaleString('pt-BR')}\n`;
+    if (r.discount > 0) msg += `Desc. venda: - R$ ${r.discount.toLocaleString('pt-BR')}\n`;
+  }
   msg += `*Total: R$ ${r.total.toLocaleString('pt-BR')}*\n`;
   msg += r.isAberto ? `*Em aberto*\n` : `*${r.parcels}x de R$ ${parcelVal.toLocaleString('pt-BR')}*\n`;
   msg += `Vencimento: todo dia ${r.day}\n`;
@@ -1010,6 +1021,78 @@ function updateSearch(v) {
 }
 function openDetail(id) { state.detail = id; render(); }
 function closeDetail() { state.detail = null; render(); }
+
+function sendContactSummary(contactId) {
+  const c = getContact(contactId);
+  if (!c) return;
+  const cSales = state.sales.filter(s => s.contact_id === contactId);
+  const meses = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+
+  let msg = `*Resumo de conta — ${c.name}*\n\n`;
+
+  // Pending sales first
+  const pendingSales = cSales.filter(s => {
+    const parcels = getSaleParcels(s);
+    return parcels.some(p => !p.paid);
+  });
+
+  const paidSales = cSales.filter(s => {
+    const parcels = getSaleParcels(s);
+    return parcels.every(p => p.paid);
+  });
+
+  let totalPending = 0;
+  let totalPaid = 0;
+
+  if (pendingSales.length > 0) {
+    msg += `📌 *PENDENTE*\n\n`;
+    pendingSales.forEach(s => {
+      const parcels = getSaleParcels(s);
+      const dataCompra = new Date(s.created_at);
+      const dataStr = `${dataCompra.getDate()}/${meses[dataCompra.getMonth()]}/${dataCompra.getFullYear()}`;
+      msg += `*${s.description}*\n`;
+      msg += `Compra: ${dataStr} · Total: R$ ${s.total}\n`;
+      msg += `${s.parcels}x de R$ ${s.parcel_value} · Dia ${s.start_day}\n`;
+      parcels.forEach(p => {
+        if (p.paid) {
+          const paidDate = p.paidAt ? new Date(p.paidAt) : null;
+          const paidStr = paidDate ? `${paidDate.getDate()}/${meses[paidDate.getMonth()]}` : '';
+          const paidAmt = p.paidAmount || p.amount;
+          msg += `  ✅ Parc. ${p.index+1}: R$ ${paidAmt} pago ${paidStr}\n`;
+          totalPaid += paidAmt;
+        } else {
+          const remaining = p.remaining || p.amount;
+          msg += `  ⏳ Parc. ${p.index+1}: R$ ${remaining} pendente · ${p.dateStr}\n`;
+          totalPending += remaining;
+        }
+      });
+      msg += `\n`;
+    });
+  }
+
+  if (paidSales.length > 0) {
+    msg += `✅ *QUITADAS*\n\n`;
+    paidSales.forEach(s => {
+      const dataCompra = new Date(s.created_at);
+      const dataStr = `${dataCompra.getDate()}/${meses[dataCompra.getMonth()]}/${dataCompra.getFullYear()}`;
+      msg += `• ${s.description} — R$ ${s.total} · ${dataStr}\n`;
+      const parcels = getSaleParcels(s);
+      parcels.forEach(p => { totalPaid += (p.paidAmount || p.amount); });
+    });
+    msg += `\n`;
+  }
+
+  msg += `———————————————\n`;
+  msg += `*Total pago: R$ ${totalPaid.toLocaleString('pt-BR')}*\n`;
+  if (totalPending > 0) {
+    msg += `*Falta pagar: R$ ${totalPending.toLocaleString('pt-BR')}*\n`;
+  } else {
+    msg += `*Tudo quitado! ✅*\n`;
+  }
+
+  const url = `https://wa.me/${c.phone}?text=${encodeURIComponent(msg)}`;
+  window.open(url, '_blank');
+}
 function openModal(m, extra) { state.modal = m; state.modalExtra = extra || null; render(); }
 function closeModal() { state.modal = null; state.chargeModal = null; state.paidModal = null; state.deleteContactModal = null; render(); setTimeout(lockScroll, 100); setTimeout(lockScroll, 300); }
 function setChargeFilter(f) { state.chargeFilter = f; render(); }
@@ -1607,7 +1690,7 @@ function renderDetail(contactId) {
         <div class="info-row"><span class="info-label">Local</span><span class="info-value">${c.local || '—'}</span></div>
         <div class="info-row"><span class="info-label">Cliente desde</span><span class="info-value">${clientSince ? clientSince.toLocaleDateString('pt-BR') : '—'}</span></div>
         <div class="info-row"><span class="info-label">A receber</span><span class="info-value" style="color:${totalPending > 0 ? '#993556' : '#3B6D11'}">R$ ${totalPending.toLocaleString('pt-BR')}</span></div>
-        <a href="https://wa.me/${c.phone}" target="_blank" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:11px;background:#25D366;border:none;border-radius:10px;color:white;font-size:14px;font-weight:500;cursor:pointer;margin-top:12px;text-decoration:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.49a.75.75 0 00.914.914l4.456-1.495A11.952 11.952 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.34 0-4.508-.758-6.26-2.04l-.438-.33-3.222 1.08 1.08-3.222-.33-.438A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg> Enviar mensagem</a>
+        <button onclick="sendContactSummary('${c.id}')" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:11px;background:#25D366;border:none;border-radius:10px;color:white;font-size:14px;font-weight:500;cursor:pointer;margin-top:12px"><svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.49a.75.75 0 00.914.914l4.456-1.495A11.952 11.952 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.34 0-4.508-.758-6.26-2.04l-.438-.33-3.222 1.08 1.08-3.222-.33-.438A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg> Enviar resumo</button>
         <button onclick="openModal('editContact','${c.id}')" style="width:100%;padding:10px;background:none;border:1px solid #e0e0e0;border-radius:10px;color:#666;font-size:14px;cursor:pointer;margin-top:8px">✏️ Editar dados</button>
       </div>
       <div class="detail-section">
