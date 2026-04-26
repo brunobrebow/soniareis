@@ -1043,6 +1043,35 @@ function updateSearch(v) {
 function openDetail(id) { state.detail = id; render(); }
 function closeDetail() { state.detail = null; render(); }
 
+function sendContactResumo(contactId) {
+  const c = getContact(contactId);
+  if (!c) return;
+  const cSales = state.sales.filter(s => s.contact_id === contactId);
+
+  // Get pending parcels grouped by sale
+  const pendingSales = cSales.filter(s => getSaleParcels(s).some(p => !p.paid));
+  if (pendingSales.length === 0) {
+    showToast('Nenhuma parcela pendente!', '#3B6D11');
+    return;
+  }
+
+  let msg = `Oiiii😍\nTudo bem?\nSegue o resumo das suas parcelas:\n\n`;
+
+  pendingSales.forEach(s => {
+    const parcels = getSaleParcels(s);
+    const nextPending = parcels.find(p => !p.paid);
+    if (!nextPending) return;
+    const remaining = nextPending.remaining || nextPending.amount;
+    msg += `📌 Pagar todo dia *${s.start_day}*\nValor da parcela: *R$ ${remaining}*\n\n`;
+  });
+
+  msg += `Nome do Pix: ${CONFIG.pixNome}\nChave PIX celular: ${CONFIG.pixChave}\n\n`;
+  msg += `Qualquer dúvida é só me chamar! 💖`;
+
+  const url = `https://wa.me/${c.phone}?text=${encodeURIComponent(msg)}`;
+  window.open(url, '_blank');
+}
+
 function sendContactSummary(contactId) {
   const c = getContact(contactId);
   if (!c) return;
@@ -1760,7 +1789,10 @@ function renderDetail(contactId) {
         <div class="info-row"><span class="info-label">Local</span><span class="info-value">${c.local || '—'}</span></div>
         <div class="info-row"><span class="info-label">Cliente desde</span><span class="info-value">${clientSince ? clientSince.toLocaleDateString('pt-BR') : '—'}</span></div>
         <div class="info-row"><span class="info-label">A receber</span><span class="info-value" style="color:${totalPending > 0 ? '#993556' : '#3B6D11'}">R$ ${totalPending.toLocaleString('pt-BR')}</span></div>
-        <button onclick="sendContactSummary('${c.id}')" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:11px;background:#25D366;border:none;border-radius:10px;color:white;font-size:14px;font-weight:500;cursor:pointer;margin-top:12px"><svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.49a.75.75 0 00.914.914l4.456-1.495A11.952 11.952 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.34 0-4.508-.758-6.26-2.04l-.438-.33-3.222 1.08 1.08-3.222-.33-.438A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg> Enviar resumo</button>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button onclick="sendContactResumo('${c.id}')" style="flex:2;display:flex;align-items:center;justify-content:center;gap:6px;padding:11px;background:#25D366;border:none;border-radius:10px;color:white;font-size:14px;font-weight:500;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.49a.75.75 0 00.914.914l4.456-1.495A11.952 11.952 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.34 0-4.508-.758-6.26-2.04l-.438-.33-3.222 1.08 1.08-3.222-.33-.438A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg> Enviar resumo</button>
+          <button onclick="sendContactSummary('${c.id}')" style="flex:1;padding:11px;background:none;border:1px solid #25D366;border-radius:10px;color:#25D366;font-size:13px;font-weight:500;cursor:pointer">Histórico</button>
+        </div>
         <button onclick="openModal('editContact','${c.id}')" style="width:100%;padding:10px;background:none;border:1px solid #e0e0e0;border-radius:10px;color:#666;font-size:14px;cursor:pointer;margin-top:8px">✏️ Editar dados</button>
       </div>
       <div class="detail-section">
