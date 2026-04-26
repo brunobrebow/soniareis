@@ -227,7 +227,7 @@ function getSaleParcels(sale) {
     const d = new Date(y, m - paidCount + i, sale.start_day);
     const payment = paymentsByIndex[i];
     const paidAmount = payment?.paid_amount || 0;
-    const remaining = sale.parcel_value - paidAmount;
+    const remaining = Math.round(sale.parcel_value - paidAmount);
     return {
       index: i,
       date: d,
@@ -375,9 +375,9 @@ async function markPaid(saleId, parcelIndex) {
   const sale = state.sales.find(s => s.id === saleId);
   const payment = state.payments.find(p => p.sale_id === saleId && p.parcel_index === parcelIndex);
   if (!sale || !payment) return;
-  const remaining = sale.parcel_value - (payment.paid_amount || 0);
+  const remaining = Math.round(sale.parcel_value - (payment.paid_amount || 0));
   try {
-    const totalPaid = (payment.paid_amount || 0) + remaining;
+    const totalPaid = Math.round((payment.paid_amount || 0) + remaining);
     await DB.markPaid(saleId, parcelIndex, totalPaid, true);
     payment.paid = true;
     payment.paid_at = new Date().toISOString();
@@ -400,9 +400,9 @@ async function markPartialPaid(saleId, parcelIndex) {
   const sale = state.sales.find(s => s.id === saleId);
   const payment = state.payments.find(p => p.sale_id === saleId && p.parcel_index === parcelIndex);
   if (!sale || !payment) return;
-  const remaining = sale.parcel_value - (payment.paid_amount || 0);
+  const remaining = Math.round(sale.parcel_value - (payment.paid_amount || 0));
   const amount = Math.min(val, remaining);
-  const totalPaid = (payment.paid_amount || 0) + amount;
+  const totalPaid = Math.round((payment.paid_amount || 0) + amount);
   const isFullPayment = totalPaid >= sale.parcel_value;
   try {
     await DB.markPaid(saleId, parcelIndex, totalPaid, isFullPayment);
@@ -415,7 +415,7 @@ async function markPartialPaid(saleId, parcelIndex) {
     showToast(`R$ ${amount.toLocaleString('pt-BR')} registrado!`);
 
     if (!isFullPayment) {
-      const newRemaining = sale.parcel_value - totalPaid;
+      const newRemaining = Math.round(sale.parcel_value - totalPaid);
       state._reminderSaleId = saleId;
       state._reminderParcelIndex = parcelIndex;
       state._reminderRemaining = newRemaining;
@@ -1313,7 +1313,7 @@ function openGroupPayment(contactId) {
   cSales.forEach(s => {
     getSaleParcels(s).forEach(p => {
       if (!p.paid) {
-        const rem = p.remaining || p.amount;
+        const rem = Math.round(p.remaining || p.amount);
         totalPending += rem;
         pendingParcels.push({ saleId: s.id, parcelIndex: p.index, remaining: rem });
       }
@@ -1332,22 +1332,25 @@ async function confirmGroupPayment() {
 
   const amount = Math.min(val, gp.totalPending);
   const parcels = gp.pendingParcels;
-  let remaining = amount;
-
-  // Distribute equally, filling each parcel proportionally
-  const perParcel = amount / parcels.length;
 
   try {
-    for (const p of parcels) {
+    // Distribute payment: divide equally with rounding, last parcel gets remainder
+    let leftover = amount;
+    const basePerParcel = Math.floor(amount / parcels.length);
+
+    for (let i = 0; i < parcels.length; i++) {
+      const p = parcels[i];
       const payment = state.payments.find(pm => pm.sale_id === p.saleId && pm.parcel_index === p.parcelIndex);
       const sale = state.sales.find(s => s.id === p.saleId);
       if (!payment || !sale) continue;
 
-      const parcelRemaining = sale.parcel_value - (payment.paid_amount || 0);
-      const payAmount = Math.min(perParcel, parcelRemaining);
+      const parcelRemaining = Math.round(sale.parcel_value - (payment.paid_amount || 0));
+      // Last parcel gets whatever is left to avoid rounding errors
+      const payAmount = Math.round(Math.min(i === parcels.length - 1 ? leftover : basePerParcel, parcelRemaining));
       if (payAmount <= 0) continue;
+      leftover -= payAmount;
 
-      const totalPaid = (payment.paid_amount || 0) + payAmount;
+      const totalPaid = Math.round((payment.paid_amount || 0) + payAmount);
       const isFullPayment = totalPaid >= sale.parcel_value;
 
       await DB.markPaid(p.saleId, p.parcelIndex, totalPaid, isFullPayment);
@@ -1361,7 +1364,7 @@ async function confirmGroupPayment() {
     showToast(`R$ ${amount.toLocaleString('pt-BR')} registrado!`);
 
     if (!isFullPayment) {
-      const newRemaining = gp.totalPending - amount;
+      const newRemaining = Math.round(gp.totalPending - amount);
       state._reminderContactId = gp.contactId;
       state._reminderGroupRemaining = newRemaining;
       state._reminderParcels = parcels;
