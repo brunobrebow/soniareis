@@ -938,7 +938,6 @@ function renderHome() {
           const sale = state.sales.find(s => s.id === p.sale_id);
           return a + (p.paid_amount || sale?.parcel_value || 0);
         }, 0);
-        const cobrandasHoje = getDueCharges('hoje').length;
 
         return `
           <div class="home-day-summary" onclick="state.modal='vendasDia';render()">
@@ -954,10 +953,6 @@ function renderHome() {
               <div class="home-day-stat">
                 <div class="home-day-stat-num" style="color:#3B6D11">R$ ${recebidoHoje.toLocaleString('pt-BR')}</div>
                 <div class="home-day-stat-label">recebido</div>
-              </div>
-              <div class="home-day-stat">
-                <div class="home-day-stat-num" style="color:#D4537E">${cobrandasHoje}</div>
-                <div class="home-day-stat-label">a cobrar</div>
               </div>
             </div>
             ${vendasHoje.length > 0 ? `
