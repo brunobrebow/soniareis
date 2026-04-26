@@ -729,7 +729,7 @@ function renderPDV() {
             </div>
             <div class="pdv-form-group" style="margin-bottom:0">
               <label class="pdv-form-label">Valor unitário</label>
-              <input class="form-input" id="pdv-val-${i}" type="number" inputmode="decimal" value="${item.value || ''}" placeholder="R$" />
+              <input class="form-input ${item.category === 'joia' ? 'pdv-val-locked' : ''}" id="pdv-val-${i}" type="number" inputmode="decimal" value="${item.value || ''}" placeholder="R$" ${item.category === 'joia' ? 'readonly' : ''} />
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
               <button class="pdv-discount-btn" onclick="pdvOpenDiscount(${i})">🏷️ Desconto</button>

@@ -303,6 +303,7 @@ body {
 .pdv-form-label { font-size: 13px; color: #888; margin-bottom: 6px; display: block; }
 .pdv-form .form-input { background: #1a1a1a; border-color: #333; color: #fff; }
 .pdv-form .form-input:focus { border-color: #D4537E; background: #222; }
+.pdv-val-locked { opacity: 0.6; pointer-events: none; }
 .pdv-form .form-input option { background: #1a1a1a; color: #fff; }
 .pdv-form-row { display: flex; gap: 12px; }
 .pdv-new-client { background: none; border: none; color: #D4537E; font-size: 13px; cursor: pointer; padding: 6px 0; }
