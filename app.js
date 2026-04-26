@@ -875,9 +875,6 @@ function renderHome() {
     return state.sales.some(s => s.contact_id === c.id && getSaleParcels(s).some(p => !p.paid));
   }).length;
 
-  // Upcoming 3 charges
-  const proximas = getDueCharges('mes').filter(c => !c.isPast).slice(0, 3);
-
   return `
     <div class="screen-scroll-list" style="padding-bottom:90px">
       <div class="home-header">
@@ -925,31 +922,63 @@ function renderHome() {
         </div>
       </div>
 
-      ${proximas.length > 0 ? `
-        <div class="home-section-title">Próximas cobranças</div>
-        ${proximas.map(({ sale, parcel, contact, isToday }) => {
-          if (!contact) return '';
-          const ci = getColorIndex(contact.id);
-          return `
-            <div class="home-upcoming-item" onclick="switchTab('cobrancas')">
-              <div class="avatar" style="width:36px;height:36px;font-size:12px;background:${COLORS[ci]};color:${TEXT_COLORS[ci]}">${getInitials(contact.name)}</div>
-              <div style="flex:1;min-width:0">
-                <div style="font-size:14px;font-weight:500;color:#1a1a1a">${contact.name.split(' ').slice(0, 2).join(' ')}</div>
-                <div style="font-size:12px;color:#aaa">${sale.description}</div>
+      <div class="home-section-title">Resumo do dia</div>
+      ${(() => {
+        const hoje = new Date();
+        const vendasHoje = state.sales.filter(s => {
+          const d = new Date(s.created_at);
+          return d.getDate() === hoje.getDate() && d.getMonth() === hoje.getMonth() && d.getFullYear() === hoje.getFullYear();
+        });
+        const totalHoje = vendasHoje.reduce((a, s) => a + s.total, 0);
+        const recebidoHoje = state.payments.filter(p => {
+          if (!p.paid || !p.paid_at) return false;
+          const d = new Date(p.paid_at);
+          return d.getDate() === hoje.getDate() && d.getMonth() === hoje.getMonth() && d.getFullYear() === hoje.getFullYear();
+        }).reduce((a, p) => {
+          const sale = state.sales.find(s => s.id === p.sale_id);
+          return a + (p.paid_amount || sale?.parcel_value || 0);
+        }, 0);
+        const cobrandasHoje = getDueCharges('hoje').length;
+
+        return `
+          <div class="home-day-summary" onclick="state.modal='vendasDia';render()">
+            <div class="home-day-stats">
+              <div class="home-day-stat">
+                <div class="home-day-stat-num">${vendasHoje.length}</div>
+                <div class="home-day-stat-label">vendas</div>
               </div>
-              <div style="text-align:right">
-                <div style="font-size:15px;font-weight:600;color:#1a1a1a">R$ ${parcel.amount}</div>
-                <div style="font-size:11px;color:${isToday ? '#D4537E' : '#aaa'}">${isToday ? 'Hoje' : parcel.dateStr}</div>
+              <div class="home-day-stat">
+                <div class="home-day-stat-num" style="color:#3B6D11">R$ ${totalHoje.toLocaleString('pt-BR')}</div>
+                <div class="home-day-stat-label">vendido</div>
               </div>
-            </div>`;
-        }).join('')}
-      ` : ''}
+              <div class="home-day-stat">
+                <div class="home-day-stat-num" style="color:#3B6D11">R$ ${recebidoHoje.toLocaleString('pt-BR')}</div>
+                <div class="home-day-stat-label">recebido</div>
+              </div>
+              <div class="home-day-stat">
+                <div class="home-day-stat-num" style="color:#D4537E">${cobrandasHoje}</div>
+                <div class="home-day-stat-label">a cobrar</div>
+              </div>
+            </div>
+            ${vendasHoje.length > 0 ? `
+              <div class="home-day-list">
+                ${vendasHoje.slice(0, 3).map(s => {
+                  const contact = getContact(s.contact_id);
+                  return `<div class="home-day-item">
+                    <span class="home-day-item-name">${contact?.name?.split(' ').slice(0, 2).join(' ') || '—'}</span>
+                    <span class="home-day-item-desc">${s.description}</span>
+                    <span class="home-day-item-val">R$ ${s.total.toLocaleString('pt-BR')}</span>
+                  </div>`;
+                }).join('')}
+                ${vendasHoje.length > 3 ? `<div style="text-align:center;font-size:12px;color:#aaa;padding:4px 0">+${vendasHoje.length - 3} mais</div>` : ''}
+              </div>
+            ` : '<div style="text-align:center;font-size:13px;color:#aaa;padding:8px 0">Nenhuma venda hoje</div>'}
+            <div class="home-day-footer">Toque para ver detalhes</div>
+          </div>`;
+      })()}
 
       <div class="home-section-title">Ações rápidas</div>
       <div class="home-actions">
-        <div class="home-action-btn" onclick="state.modal='vendasDia';render()">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Vendas do dia
-        </div>
         <div class="home-action-btn" onclick="switchTab('contatos');setTimeout(()=>openModal('addContact'),100)">
           <span>＋</span> Nova cliente
         </div>
