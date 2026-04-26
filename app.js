@@ -63,27 +63,65 @@ let state = {
 function getCobradas() {
   try { return JSON.parse(localStorage.getItem('srcrm_cobradas') || '{}'); } catch { return {}; }
 }
-function markCobrada(saleId, parcelIndex) {
+function markCobrada(saleId, parcelIndex, days) {
   const cobradas = getCobradas();
-  cobradas[`${saleId}-${parcelIndex}`] = Date.now();
+  cobradas[`${saleId}-${parcelIndex}`] = { ts: Date.now(), days: days || 2 };
   localStorage.setItem('srcrm_cobradas', JSON.stringify(cobradas));
 }
 function isCobrada(saleId, parcelIndex) {
   const cobradas = getCobradas();
-  const ts = cobradas[`${saleId}-${parcelIndex}`];
-  if (!ts) return false;
-  const twoDays = 2 * 24 * 60 * 60 * 1000;
-  if (Date.now() - ts > twoDays) {
+  const entry = cobradas[`${saleId}-${parcelIndex}`];
+  if (!entry) return false;
+  const ts = typeof entry === 'number' ? entry : entry.ts;
+  const days = typeof entry === 'number' ? 2 : (entry.days || 2);
+  const limit = days * 24 * 60 * 60 * 1000;
+  if (Date.now() - ts > limit) {
     delete cobradas[`${saleId}-${parcelIndex}`];
     localStorage.setItem('srcrm_cobradas', JSON.stringify(cobradas));
     return false;
   }
   return true;
 }
+function markAllCobrada(charges, days) {
+  charges.forEach(c => markCobrada(c.sale.id, c.parcel.index, days));
+  render();
+}
 function openWppAndMark(url, saleId, parcelIndex) {
-  markCobrada(saleId, parcelIndex);
+  markCobrada(saleId, parcelIndex, 2);
   window.open(url, '_blank');
   render();
+}
+function openWppAndMarkAll(url, charges) {
+  charges.forEach(c => markCobrada(c.sale.id, c.parcel.index, 2));
+  window.open(url, '_blank');
+  render();
+}
+
+function getGroupChargeUrl(contact, charges) {
+  const total = charges.reduce((a, c) => a + (c.parcel.remaining || c.parcel.amount), 0);
+  let msg = `Oiiii😍\nTudo bem?\nEstou enviando o valor do seu pix de hoje!\n\nValor a pagar hoje: R$ ${total}\nVencimento todo dia: ${charges[0]?.sale.start_day || ''}\n\nNome do Pix: ${CONFIG.pixNome}\nChave PIX celular: ${CONFIG.pixChave}\n\nObrigada! 💖`;
+  return `https://wa.me/${contact.phone}?text=${encodeURIComponent(msg)}`;
+}
+
+function cobrarGrupo(contactId) {
+  const allDueCharges = getDueCharges('mes');
+  const contactCharges = allDueCharges.filter(c => c.contact?.id === contactId && (c.isPast || c.isToday) && !isCobrada(c.sale.id, c.parcel.index));
+  if (contactCharges.length === 0) return;
+  const contact = contactCharges[0].contact;
+  const url = getGroupChargeUrl(contact, contactCharges);
+  contactCharges.forEach(c => markCobrada(c.sale.id, c.parcel.index, 2));
+  window.open(url, '_blank');
+  render();
+}
+
+function cobrarGrupoRealizada(contactId) {
+  const allDueCharges = getDueCharges('mes');
+  const contactCharges = allDueCharges.filter(c => c.contact?.id === contactId && (c.isPast || c.isToday) && isCobrada(c.sale.id, c.parcel.index));
+  if (contactCharges.length === 0) return;
+  const contact = contactCharges[0].contact;
+  const url = getGroupChargeUrl(contact, contactCharges);
+  contactCharges.forEach(c => markCobrada(c.sale.id, c.parcel.index, 2));
+  window.open(url, '_blank');
 }
 
 // ---------- LOGIN ----------
@@ -1222,6 +1260,31 @@ function sendTransactionSummary(contactId, saleIdsStr) {
 function openModal(m, extra) { state.modal = m; state.modalExtra = extra || null; render(); }
 function closeModal() { state.modal = null; state.chargeModal = null; state.paidModal = null; state.deleteContactModal = null; render(); setTimeout(lockScroll, 100); setTimeout(lockScroll, 300); }
 function setChargeFilter(f) { state.chargeFilter = f; render(); }
+
+function openAdiar(chargeKeys) {
+  state._adiarCharges = chargeKeys;
+  state.modal = 'adiar';
+  render();
+}
+
+function openAdiarForContact(contactId) {
+  const allDueCharges = getDueCharges('mes');
+  const contactCharges = allDueCharges.filter(c => c.contact?.id === contactId && (c.isPast || c.isToday));
+  const keys = contactCharges.map(c => c.sale.id + '|' + c.parcel.index);
+  openAdiar(keys);
+}
+
+function confirmAdiar() {
+  const days = parseInt(document.getElementById('adiar-days')?.value) || 7;
+  if (state._adiarCharges) {
+    state._adiarCharges.forEach(k => {
+      const [saleId, idx] = k.split('|');
+      markCobrada(saleId, parseInt(idx), days);
+    });
+  }
+  closeModal();
+  showToast(`Cobrança adiada por ${days} dia${days > 1 ? 's' : ''}`);
+}
 function selectFinanceCard(key) { state.financeDetail = key; render(); }
 function setFinancePeriod(p) {
   if (p === 'custom') {
@@ -1519,48 +1582,28 @@ function renderContatos() {
 
 function renderCobrancas() {
   const today = new Date();
-  const diasSemana = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
-
-  // Get today + overdue charges (not future)
   const allDueCharges = getDueCharges('mes');
   const todayAndLate = allDueCharges.filter(c => c.isPast || c.isToday);
 
-  // Split into pendente vs realizada
   const pendentes = todayAndLate.filter(c => !isCobrada(c.sale.id, c.parcel.index));
   const realizadas = todayAndLate.filter(c => isCobrada(c.sale.id, c.parcel.index));
 
   const filter = state.chargeFilter || 'pendente';
   const charges = filter === 'pendente' ? pendentes : realizadas;
 
-  // Group by day
-  const groups = [];
-  let currentKey = null;
-  let currentGroup = null;
-
-  const sorted = [...charges].sort((a, b) => {
-    if (a.isPast && !b.isPast) return -1;
-    if (!a.isPast && b.isPast) return 1;
-    return a.parcel.date - b.parcel.date;
+  // Group by contact
+  const contactGroups = {};
+  charges.forEach(c => {
+    const cid = c.contact?.id;
+    if (!cid) return;
+    if (!contactGroups[cid]) contactGroups[cid] = { contact: c.contact, charges: [], hasLate: false };
+    contactGroups[cid].charges.push(c);
+    if (c.isPast) contactGroups[cid].hasLate = true;
   });
-
-  sorted.forEach(charge => {
-    const d = charge.parcel.date;
-    let key, label, isPastGroup;
-    if (charge.isPast) {
-      key = `late-${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-      label = `${diasSemana[d.getDay()]}, ${d.getDate()} — Atrasado`;
-      isPastGroup = true;
-    } else {
-      key = `today-${d.getDate()}`;
-      label = `Hoje, ${diasSemana[d.getDay()].toLowerCase()}, ${d.getDate()}`;
-      isPastGroup = false;
-    }
-    if (key !== currentKey) {
-      currentKey = key;
-      currentGroup = { label, isPast: isPastGroup, items: [] };
-      groups.push(currentGroup);
-    }
-    currentGroup.items.push(charge);
+  const groups = Object.values(contactGroups).sort((a, b) => {
+    if (a.hasLate && !b.hasLate) return -1;
+    if (!a.hasLate && b.hasLate) return 1;
+    return a.contact.name.localeCompare(b.contact.name, 'pt-BR');
   });
 
   return `
@@ -1575,49 +1618,47 @@ function renderCobrancas() {
         <button class="filter-tab ${filter === 'realizada' ? 'active' : ''}" onclick="setChargeFilter('realizada')">Cobrança realizada (${realizadas.length})</button>
       </div>
       <div class="charge-summary">
-        <div class="charge-summary-item"><span class="charge-summary-num">${charges.length}</span><span class="charge-summary-label">cobranças</span></div>
+        <div class="charge-summary-item"><span class="charge-summary-num">${groups.length}</span><span class="charge-summary-label">clientes</span></div>
         <div class="charge-summary-item"><span class="charge-summary-num" style="color:#A32D2D">${charges.filter(c => c.isPast).length}</span><span class="charge-summary-label">atrasadas</span></div>
-        <div class="charge-summary-item"><span class="charge-summary-num" style="color:#993556">R$ ${charges.reduce((a, c) => a + c.parcel.remaining, 0).toLocaleString('pt-BR')}</span><span class="charge-summary-label">total</span></div>
+        <div class="charge-summary-item"><span class="charge-summary-num" style="color:#993556">R$ ${charges.reduce((a, c) => a + (c.parcel.remaining || c.parcel.amount), 0).toLocaleString('pt-BR')}</span><span class="charge-summary-label">total</span></div>
       </div>
     </div>
     <div class="screen-scroll-list">
-      ${charges.length === 0 ? '<div class="empty-state">' + (filter === 'pendente' ? 'Nenhuma cobrança pendente 🎉' : 'Nenhuma cobrança realizada') + '</div>' : ''}
-      ${groups.map(group => `
-        <div class="day-header">
-          <span class="day-header-text ${group.isPast ? 'day-header-late' : ''}">${group.label}</span>
-          <div class="day-header-line ${group.isPast ? 'day-header-line-late' : ''}"></div>
-        </div>
-        ${group.items.map(({ sale, parcel, contact, isPast, isToday }) => {
-          if (!contact) return '';
-          const ci = getColorIndex(contact.id);
-          const msg = getWhatsappMsg(contact, parcel, sale);
-          const wppUrl = 'https://wa.me/' + contact.phone + '?text=' + encodeURIComponent(msg);
-          const isCard = sale.payment_method === 'cartao';
-          return '<div class="charge-item ' + (isPast ? 'charge-item-late' : '') + '">' +
-            '<div class="charge-header">' +
-              '<div class="avatar" style="width:38px;height:38px;font-size:13px;background:' + COLORS[ci] + ';color:' + TEXT_COLORS[ci] + '">' + getInitials(contact.name) + '</div>' +
-              '<span class="charge-name">' + contact.name.split(' ').slice(0, 2).join(' ') + '</span>' +
-              (isPast ? '<span class="badge badge-late">Atrasado</span>' : '') +
+      ${groups.length === 0 ? '<div class="empty-state">' + (filter === 'pendente' ? 'Nenhuma cobrança pendente 🎉' : 'Nenhuma cobrança realizada') + '</div>' : ''}
+      ${groups.map(g => {
+        const ci = getColorIndex(g.contact.id);
+        const total = g.charges.reduce((a, c) => a + (c.parcel.remaining || c.parcel.amount), 0);
+        const isCard = g.charges[0]?.sale.payment_method === 'cartao';
+        const wppUrl = getGroupChargeUrl(g.contact, g.charges);
+
+        return '<div class="charge-item ' + (g.hasLate ? 'charge-item-late' : '') + '">' +
+          '<div class="charge-header">' +
+            '<div class="avatar" style="width:42px;height:42px;font-size:14px;background:' + COLORS[ci] + ';color:' + TEXT_COLORS[ci] + '">' + getInitials(g.contact.name) + '</div>' +
+            '<div style="flex:1">' +
+              '<span class="charge-name">' + g.contact.name + '</span>' +
+              '<div style="font-size:12px;color:#aaa;margin-top:2px">' + g.charges.length + ' parcela' + (g.charges.length > 1 ? 's' : '') + '</div>' +
             '</div>' +
-            '<div class="charge-body">' +
-              '<div>' +
-                '<div class="charge-detail">' + sale.description + '</div>' +
-                '<div class="charge-detail" style="margin-top:2px">Parc. ' + (parcel.index + 1) + '/' + sale.parcels + '</div>' +
-              '</div>' +
-              '<div class="charge-amount">R$ ' + parcel.remaining + '</div>' +
+            '<div style="text-align:right">' +
+              '<div class="charge-amount" style="margin:0">R$ ' + total.toLocaleString('pt-BR') + '</div>' +
+              (g.hasLate ? '<span class="badge badge-late" style="margin-top:4px;display:inline-block">Atrasado</span>' : '') +
             '</div>' +
-            '<div class="charge-actions">' +
-              (filter === 'realizada' ?
-                '<button class="btn-pago" style="flex:2" onclick="openDetail(\'' + contact.id + '\')">Ver contato</button>' :
-                (isCard ?
-                  '<span class="charge-cartao-tag">💳 Cartão</span>' :
-                  '<button class="btn-cobrar" onclick="openWppAndMark(\'' + wppUrl + '\',\'' + sale.id + '\',' + parcel.index + ')"><svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.49a.75.75 0 00.914.914l4.456-1.495A11.952 11.952 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.34 0-4.508-.758-6.26-2.04l-.438-.33-3.222 1.08 1.08-3.222-.33-.438A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg> Cobrar</button>')
-              ) +
-              '<button class="btn-pago" onclick="openPaidModal(\'' + sale.id + '\',' + parcel.index + ')">Registrar pgto</button>' +
-            '</div>' +
-          '</div>';
-        }).join('')}
-      `).join('')}
+          '</div>' +
+          '<div class="charge-actions">' +
+            (filter === 'realizada' ?
+              '<button class="btn-cobrar" onclick="cobrarGrupoRealizada(\'' + g.contact.id + '\')">' +
+                '<svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.49a.75.75 0 00.914.914l4.456-1.495A11.952 11.952 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.34 0-4.508-.758-6.26-2.04l-.438-.33-3.222 1.08 1.08-3.222-.33-.438A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>' +
+                ' Cobrar</button>' :
+              (isCard ?
+                '<span class="charge-cartao-tag">💳 Cartão</span>' :
+                '<button class="btn-cobrar" onclick="cobrarGrupo(\'' + g.contact.id + '\')">' +
+                  '<svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.49a.75.75 0 00.914.914l4.456-1.495A11.952 11.952 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.34 0-4.508-.758-6.26-2.04l-.438-.33-3.222 1.08 1.08-3.222-.33-.438A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>' +
+                  ' Cobrar</button>')
+            ) +
+            '<button class="btn-pago" onclick="openAdiarForContact(\'' + g.contact.id + '\')">Adiar</button>' +
+            '<button class="btn-pago" onclick="openDetail(\'' + g.contact.id + '\')">Registrar</button>' +
+          '</div>' +
+        '</div>';
+      }).join('')}
     </div>`;
 }
 
@@ -2003,6 +2044,22 @@ function renderModal() {
           </div>
         `}
         <button class="btn-cancel" onclick="closeModal()">Fechar</button>
+      </div>
+    </div>`;
+  }
+
+  if (state.modal === 'adiar' && state.modalExtra) {
+    return `<div class="modal-overlay" onclick="closeModal()">
+      <div class="modal-sheet" onclick="event.stopPropagation()">
+        <div class="modal-title">Adiar cobrança</div>
+        <div class="modal-subtitle">Por quantos dias deseja adiar?</div>
+        <div class="form-group">
+          <select class="form-input" id="adiar-days">
+            ${Array.from({length:30},(_,i)=>`<option value="${i+1}">${i+1} dia${i>0?'s':''}</option>`).join('')}
+          </select>
+        </div>
+        <button class="btn-primary" onclick="confirmAdiar()">Confirmar</button>
+        <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
       </div>
     </div>`;
   }
