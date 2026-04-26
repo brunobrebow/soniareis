@@ -527,11 +527,12 @@ async function pdvAddContact() {
 
 function pdvUpdateDiscountSummary() {
   const disc = parseFloat(document.getElementById('pdv-total-discount')?.value) || 0;
-  const sub = pdvCartTotal();
+  const afterItemDisc = pdvCartTotal();
   const el = document.getElementById('pdv-disc-summary');
   if (!el) return;
   if (disc > 0) {
-    el.innerHTML = `<div style="font-size:13px;color:#3B6D11;margin-top:6px">Desconto: - R$ ${disc.toLocaleString('pt-BR')}</div><div style="font-size:14px;color:#888;margin-top:8px">Total</div><div style="font-size:26px;font-weight:700;color:#fff">R$ ${Math.max(0, sub - disc).toLocaleString('pt-BR')}</div>`;
+    const finalTotal = Math.max(0, afterItemDisc - disc);
+    el.innerHTML = `<div style="display:flex;justify-content:space-between;font-size:14px;color:#3B6D11;margin-top:6px"><span>Desc. venda</span><span>- R$ ${disc.toLocaleString('pt-BR')}</span></div><div style="display:flex;justify-content:space-between;font-size:20px;font-weight:700;color:#fff;margin-top:6px;padding-top:6px;border-top:1px solid #333"><span>Total final</span><span>R$ ${finalTotal.toLocaleString('pt-BR')}</span></div>`;
   } else {
     el.innerHTML = '';
   }
@@ -788,8 +789,18 @@ function renderPDV() {
       ${topbar('pdvPaymentBack()', 'Pagamento')}
       <div class="pdv-form">
         <div class="pdv-value-display" id="pdv-payment-summary">
-          <div style="font-size:14px;color:#888">Subtotal</div>
-          <div style="font-size:22px;font-weight:700;color:#fff">R$ ${pdvCartTotal().toLocaleString('pt-BR')}</div>
+          ${(() => {
+            const rawSub = state.pdvCart.reduce((a, i) => a + i.value * (i.qty || 1), 0);
+            const itemDisc = state.pdvCart.reduce((a, i) => a + (i.discount || 0) * (i.qty || 1), 0);
+            const afterItemDisc = pdvCartTotal();
+            if (itemDisc > 0) {
+              return `<div style="display:flex;justify-content:space-between;font-size:14px;color:#888"><span>Subtotal</span><span>R$ ${rawSub.toLocaleString('pt-BR')}</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:14px;color:#3B6D11;margin-top:4px"><span>Desc. produtos</span><span>- R$ ${itemDisc.toLocaleString('pt-BR')}</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:18px;font-weight:700;color:#fff;margin-top:6px;padding-top:6px;border-top:1px solid #333"><span>Total</span><span>R$ ${afterItemDisc.toLocaleString('pt-BR')}</span></div>`;
+            } else {
+              return `<div style="font-size:14px;color:#888">Subtotal</div><div style="font-size:22px;font-weight:700;color:#fff">R$ ${afterItemDisc.toLocaleString('pt-BR')}</div>`;
+            }
+          })()}
           <div id="pdv-disc-summary"></div>
         </div>
         <div class="pdv-form-group">
