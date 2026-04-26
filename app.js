@@ -413,6 +413,15 @@ async function markPartialPaid(saleId, parcelIndex) {
     payment.paid_at = new Date().toISOString();
     state.paidModal = null;
     showToast(`R$ ${amount.toLocaleString('pt-BR')} registrado!`);
+
+    if (!isFullPayment) {
+      const newRemaining = sale.parcel_value - totalPaid;
+      state._reminderSaleId = saleId;
+      state._reminderParcelIndex = parcelIndex;
+      state._reminderRemaining = newRemaining;
+      state.modal = 'reminderDays';
+    }
+
     render();
     setTimeout(lockScroll, 100);
     setTimeout(lockScroll, 500);
@@ -1285,6 +1294,15 @@ function confirmAdiar() {
   closeModal();
   showToast(`Cobrança adiada por ${days} dia${days > 1 ? 's' : ''}`);
 }
+
+function confirmReminder() {
+  const days = parseInt(document.getElementById('reminder-days')?.value) || 5;
+  if (state._reminderSaleId) {
+    markCobrada(state._reminderSaleId, state._reminderParcelIndex, days);
+  }
+  closeModal();
+  showToast(`Lembrete em ${days} dia${days > 1 ? 's' : ''}`);
+}
 function selectFinanceCard(key) { state.financeDetail = key; render(); }
 function setFinancePeriod(p) {
   if (p === 'custom') {
@@ -2045,6 +2063,30 @@ function renderModal() {
           </div>
         `}
         <button class="btn-cancel" onclick="closeModal()">Fechar</button>
+      </div>
+    </div>`;
+  }
+
+  if (state.modal === 'reminderDays') {
+    const rem = state._reminderRemaining || 0;
+    return `<div class="modal-overlay">
+      <div class="modal-sheet">
+        <div class="modal-title">Pagamento parcial registrado</div>
+        <div class="modal-subtitle">Ainda faltam R$ ${rem.toLocaleString('pt-BR')} para quitar esta parcela. Em quantos dias deseja ser relembrada de cobrar?</div>
+        <div class="form-group">
+          <select class="form-input" id="reminder-days">
+            <option value="1">1 dia</option>
+            <option value="2">2 dias</option>
+            <option value="3">3 dias</option>
+            <option value="5" selected>5 dias</option>
+            <option value="7">7 dias</option>
+            <option value="10">10 dias</option>
+            <option value="15">15 dias</option>
+            <option value="30">30 dias</option>
+          </select>
+        </div>
+        <button class="btn-primary" onclick="confirmReminder()">Confirmar</button>
+        <button class="btn-cancel" onclick="closeModal()">Pular</button>
       </div>
     </div>`;
   }
