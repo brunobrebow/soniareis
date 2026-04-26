@@ -560,12 +560,14 @@ async function pdvSaveEditContact() {
 
 async function pdvSubmit() {
   const contactId = document.getElementById('pdv-contact')?.value;
-  const parcels = parseInt(document.getElementById('pdv-parcels')?.value);
+  const parcelsRaw = document.getElementById('pdv-parcels')?.value;
+  const isAberto = parcelsRaw === 'aberto';
+  const parcels = isAberto ? 1 : parseInt(parcelsRaw);
   const day = parseInt(document.getElementById('pdv-day')?.value);
   const method = document.querySelector('input[name="pdv-method"]:checked')?.value || 'pix';
   const totalDiscount = parseFloat(document.getElementById('pdv-total-discount')?.value) || 0;
   if (!contactId) { showToast('Selecione a cliente', '#A32D2D'); return; }
-  if (!parcels) { showToast('Selecione o número de parcelas', '#A32D2D'); return; }
+  if (!parcelsRaw) { showToast('Selecione o número de parcelas', '#A32D2D'); return; }
   if (!day) { showToast('Selecione o dia de cobrança', '#A32D2D'); return; }
 
   const contact = getContact(contactId);
@@ -596,7 +598,7 @@ async function pdvSubmit() {
       items.push({ ...item, total: itemTotal, parcel_value: Math.round(itemTotal / parcels) });
     }
 
-    state.pdvResult = { items, contact, parcels, day, method, total, discount: totalDiscount };
+    state.pdvResult = { items, contact, parcels, day, method, total, discount: totalDiscount, isAberto };
     state.pdvStep = 'success';
     render();
   } catch (e) {
@@ -616,7 +618,7 @@ function pdvShareWhatsApp() {
   msg += `\n`;
   if (r.discount > 0) msg += `Desconto: - R$ ${r.discount.toLocaleString('pt-BR')}\n`;
   msg += `*Total: R$ ${r.total.toLocaleString('pt-BR')}*\n`;
-  msg += `*${r.parcels}x de R$ ${parcelVal.toLocaleString('pt-BR')}*\n`;
+  msg += r.isAberto ? `*Em aberto*\n` : `*${r.parcels}x de R$ ${parcelVal.toLocaleString('pt-BR')}*\n`;
   msg += `Vencimento: todo dia ${r.day}\n`;
   msg += `Pagamento: ${r.method === 'pix' ? 'Pix' : 'Cartão'}\n\n`;
   msg += `Obrigada pela compra! 💖`;
@@ -784,6 +786,7 @@ function renderPDV() {
             <select class="form-input" id="pdv-parcels">
               <option value="" disabled selected>—</option>
               ${Array.from({length:12},(_,i)=>`<option value="${i+1}">${i+1}x</option>`).join('')}
+              <option value="aberto">Em aberto</option>
             </select>
           </div>
           <div class="pdv-form-group" style="flex:1">
@@ -852,7 +855,7 @@ function renderPDV() {
         <div class="pdv-receipt">
           <div class="pdv-receipt-hero">
             <div class="pdv-receipt-day">Dia ${r.day}</div>
-            <div class="pdv-receipt-parcels">${r.parcels}x de R$ ${pv.toLocaleString('pt-BR')}</div>
+            <div class="pdv-receipt-parcels">${r.isAberto ? 'Em aberto' : r.parcels + 'x de R$ ' + pv.toLocaleString('pt-BR')}</div>
           </div>
           <div class="pdv-receipt-divider"></div>
           <div class="pdv-receipt-row"><span>Cliente</span><span>${r.contact.name}</span></div>
