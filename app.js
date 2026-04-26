@@ -1028,24 +1028,53 @@ function sendContactSummary(contactId) {
   const cSales = state.sales.filter(s => s.contact_id === contactId);
   const meses = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 
-  let msg = `*Resumo de conta — ${c.name}*\n\n`;
-
-  // Pending sales first
-  const pendingSales = cSales.filter(s => {
-    const parcels = getSaleParcels(s);
-    return parcels.some(p => !p.paid);
-  });
-
-  const paidSales = cSales.filter(s => {
-    const parcels = getSaleParcels(s);
-    return parcels.every(p => p.paid);
-  });
-
-  let totalPending = 0;
+  // Calculate totals
   let totalPaid = 0;
+  let totalPending = 0;
+  let pendingParcels = [];
+
+  const pendingSales = cSales.filter(s => getSaleParcels(s).some(p => !p.paid));
+  const paidSales = cSales.filter(s => getSaleParcels(s).every(p => p.paid));
+
+  cSales.forEach(s => {
+    getSaleParcels(s).forEach(p => {
+      if (p.paid) {
+        totalPaid += (p.paidAmount || p.amount);
+      } else {
+        const remaining = p.remaining || p.amount;
+        totalPending += remaining;
+        pendingParcels.push({ desc: s.description, amount: remaining, dateStr: p.dateStr, date: p.date, day: s.start_day });
+      }
+    });
+  });
+
+  pendingParcels.sort((a, b) => a.date - b.date);
+
+  // ── SECTION 1: RESUMO FINANCEIRO ──
+  let msg = `*Resumo financeiro — ${c.name}*\n\n`;
+  msg += `✅ Já pagou: *R$ ${totalPaid.toLocaleString('pt-BR')}*\n`;
+
+  if (totalPending > 0) {
+    msg += `⏳ Falta pagar: *R$ ${totalPending.toLocaleString('pt-BR')}*\n`;
+    msg += `📋 Parcelas restantes: *${pendingParcels.length}*\n\n`;
+
+    msg += `*Próximos vencimentos:*\n`;
+    pendingParcels.slice(0, 6).forEach(p => {
+      msg += `• ${p.dateStr} — R$ ${p.amount} (${p.desc})\n`;
+    });
+    if (pendingParcels.length > 6) {
+      msg += `  _+ ${pendingParcels.length - 6} parcelas restantes_\n`;
+    }
+  } else {
+    msg += `\n🎉 *Tudo quitado!*\n`;
+  }
+
+  // ── SECTION 2: HISTÓRICO COMPLETO ──
+  msg += `\n———————————————\n`;
+  msg += `📖 *HISTÓRICO COMPLETO*\n\n`;
 
   if (pendingSales.length > 0) {
-    msg += `📌 *PENDENTE*\n\n`;
+    msg += `📌 *Em andamento*\n\n`;
     pendingSales.forEach(s => {
       const parcels = getSaleParcels(s);
       const dataCompra = new Date(s.created_at);
@@ -1057,13 +1086,9 @@ function sendContactSummary(contactId) {
         if (p.paid) {
           const paidDate = p.paidAt ? new Date(p.paidAt) : null;
           const paidStr = paidDate ? `${paidDate.getDate()}/${meses[paidDate.getMonth()]}` : '';
-          const paidAmt = p.paidAmount || p.amount;
-          msg += `  ✅ Parc. ${p.index+1}: R$ ${paidAmt} pago ${paidStr}\n`;
-          totalPaid += paidAmt;
+          msg += `  ✅ Parc. ${p.index+1}: R$ ${p.paidAmount || p.amount} pago ${paidStr}\n`;
         } else {
-          const remaining = p.remaining || p.amount;
-          msg += `  ⏳ Parc. ${p.index+1}: R$ ${remaining} pendente · ${p.dateStr}\n`;
-          totalPending += remaining;
+          msg += `  ⏳ Parc. ${p.index+1}: R$ ${p.remaining || p.amount} pendente · ${p.dateStr}\n`;
         }
       });
       msg += `\n`;
@@ -1071,23 +1096,12 @@ function sendContactSummary(contactId) {
   }
 
   if (paidSales.length > 0) {
-    msg += `✅ *QUITADAS*\n\n`;
+    msg += `✅ *Quitadas*\n\n`;
     paidSales.forEach(s => {
       const dataCompra = new Date(s.created_at);
       const dataStr = `${dataCompra.getDate()}/${meses[dataCompra.getMonth()]}/${dataCompra.getFullYear()}`;
       msg += `• ${s.description} — R$ ${s.total} · ${dataStr}\n`;
-      const parcels = getSaleParcels(s);
-      parcels.forEach(p => { totalPaid += (p.paidAmount || p.amount); });
     });
-    msg += `\n`;
-  }
-
-  msg += `———————————————\n`;
-  msg += `*Total pago: R$ ${totalPaid.toLocaleString('pt-BR')}*\n`;
-  if (totalPending > 0) {
-    msg += `*Falta pagar: R$ ${totalPending.toLocaleString('pt-BR')}*\n`;
-  } else {
-    msg += `*Tudo quitado! ✅*\n`;
   }
 
   const url = `https://wa.me/${c.phone}?text=${encodeURIComponent(msg)}`;
