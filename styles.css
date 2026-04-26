@@ -155,7 +155,7 @@ body {
 .home-day-item-name { font-weight: 500; color: #1a1a1a; }
 .home-day-item-desc { flex: 1; color: #aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .home-day-item-val { font-weight: 600; color: #1a1a1a; }
-.home-day-footer { text-align: center; font-size: 12px; color: #D4537E; padding-top: 8px; border-top: 1px solid #e8e8e8; margin-top: 8px; }
+.home-day-footer { text-align: center; font-size: 12px; color: #D4537E; padding-top: 12px; }
 
 /* ─── CHARGE CARDS ─── */
 .day-header { padding: 18px 16px 8px; }

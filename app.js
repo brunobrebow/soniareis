@@ -1057,19 +1057,6 @@ function renderHome() {
                 <div class="home-day-stat-label">recebido</div>
               </div>
             </div>
-            ${vendasHoje.length > 0 ? `
-              <div class="home-day-list">
-                ${vendasHoje.slice(0, 3).map(s => {
-                  const contact = getContact(s.contact_id);
-                  return `<div class="home-day-item">
-                    <span class="home-day-item-name">${contact?.name?.split(' ').slice(0, 2).join(' ') || '—'}</span>
-                    <span class="home-day-item-desc">${s.description}</span>
-                    <span class="home-day-item-val">R$ ${s.total.toLocaleString('pt-BR')}</span>
-                  </div>`;
-                }).join('')}
-                ${vendasHoje.length > 3 ? `<div style="text-align:center;font-size:12px;color:#aaa;padding:4px 0">+${vendasHoje.length - 3} mais</div>` : ''}
-              </div>
-            ` : '<div style="text-align:center;font-size:13px;color:#aaa;padding:8px 0">Nenhuma venda hoje</div>'}
             <div class="home-day-footer">Toque para ver detalhes</div>
           </div>`;
       })()}

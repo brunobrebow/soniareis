@@ -1,7 +1,7 @@
 // sw.js — service worker para PWA
 // Estratégia: network-first (sempre busca versão nova, cache é fallback offline)
 
-const CACHE_NAME = 'sonia-reis-crm-v41';
+const CACHE_NAME = 'sonia-reis-crm-v42';
 const ASSETS = [
   '/',
   '/index.html',
