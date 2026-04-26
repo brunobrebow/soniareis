@@ -1303,6 +1303,93 @@ function confirmReminder() {
   closeModal();
   showToast(`Lembrete em ${days} dia${days > 1 ? 's' : ''}`);
 }
+
+function openGroupPayment(contactId) {
+  const contact = getContact(contactId);
+  if (!contact) return;
+  const cSales = state.sales.filter(s => s.contact_id === contactId);
+  let totalPending = 0;
+  const pendingParcels = [];
+  cSales.forEach(s => {
+    getSaleParcels(s).forEach(p => {
+      if (!p.paid) {
+        const rem = p.remaining || p.amount;
+        totalPending += rem;
+        pendingParcels.push({ saleId: s.id, parcelIndex: p.index, remaining: rem });
+      }
+    });
+  });
+  state._groupPayment = { contactId, contactName: contact.name, totalPending, pendingParcels };
+  state.modal = 'groupPayment';
+  render();
+}
+
+async function confirmGroupPayment() {
+  const val = parseFloat(document.getElementById('group-pay-amount')?.value) || 0;
+  if (val <= 0) { showToast('Insira um valor válido', '#A32D2D'); return; }
+  const gp = state._groupPayment;
+  if (!gp) return;
+
+  const amount = Math.min(val, gp.totalPending);
+  const parcels = gp.pendingParcels;
+  let remaining = amount;
+
+  // Distribute equally, filling each parcel proportionally
+  const perParcel = amount / parcels.length;
+
+  try {
+    for (const p of parcels) {
+      const payment = state.payments.find(pm => pm.sale_id === p.saleId && pm.parcel_index === p.parcelIndex);
+      const sale = state.sales.find(s => s.id === p.saleId);
+      if (!payment || !sale) continue;
+
+      const parcelRemaining = sale.parcel_value - (payment.paid_amount || 0);
+      const payAmount = Math.min(perParcel, parcelRemaining);
+      if (payAmount <= 0) continue;
+
+      const totalPaid = (payment.paid_amount || 0) + payAmount;
+      const isFullPayment = totalPaid >= sale.parcel_value;
+
+      await DB.markPaid(p.saleId, p.parcelIndex, totalPaid, isFullPayment);
+      payment.paid_amount = totalPaid;
+      if (isFullPayment) payment.paid = true;
+      payment.paid_at = new Date().toISOString();
+    }
+
+    const isFullPayment = amount >= gp.totalPending;
+    state.modal = null;
+    showToast(`R$ ${amount.toLocaleString('pt-BR')} registrado!`);
+
+    if (!isFullPayment) {
+      const newRemaining = gp.totalPending - amount;
+      state._reminderContactId = gp.contactId;
+      state._reminderGroupRemaining = newRemaining;
+      state._reminderParcels = parcels;
+      state.modal = 'groupReminderDays';
+    }
+
+    render();
+    setTimeout(lockScroll, 100);
+    setTimeout(lockScroll, 500);
+  } catch (e) {
+    showToast('Erro ao registrar.', '#A32D2D');
+    console.error(e);
+  }
+}
+
+function confirmGroupReminder() {
+  const days = parseInt(document.getElementById('group-reminder-days')?.value) || 5;
+  if (state._reminderParcels) {
+    state._reminderParcels.forEach(p => {
+      const payment = state.payments.find(pm => pm.sale_id === p.saleId && pm.parcel_index === p.parcelIndex);
+      if (payment && !payment.paid) {
+        markCobrada(p.saleId, p.parcelIndex, days);
+      }
+    });
+  }
+  closeModal();
+  showToast(`Lembrete em ${days} dia${days > 1 ? 's' : ''}`);
+}
 function selectFinanceCard(key) { state.financeDetail = key; render(); }
 function setFinancePeriod(p) {
   if (p === 'custom') {
@@ -1673,7 +1760,7 @@ function renderCobrancas() {
                   ' Cobrar</button>')
             ) +
             '<button class="btn-pago" onclick="openAdiarForContact(\'' + g.contact.id + '\')">Adiar</button>' +
-            '<button class="btn-pago" onclick="openDetail(\'' + g.contact.id + '\')">Registrar</button>' +
+            '<button class="btn-pago" onclick="openGroupPayment(\'' + g.contact.id + '\')">Registrar</button>' +
           '</div>' +
         '</div>';
       }).join('')}
@@ -2063,6 +2150,46 @@ function renderModal() {
           </div>
         `}
         <button class="btn-cancel" onclick="closeModal()">Fechar</button>
+      </div>
+    </div>`;
+  }
+
+  if (state.modal === 'groupPayment' && state._groupPayment) {
+    const gp = state._groupPayment;
+    return `<div class="modal-overlay" onclick="closeModal()">
+      <div class="modal-sheet" onclick="event.stopPropagation()">
+        <div class="modal-title">Registrar pagamento</div>
+        <div class="modal-subtitle">${gp.contactName} · Total pendente: R$ ${gp.totalPending.toLocaleString('pt-BR')}</div>
+        <div class="form-group">
+          <label class="form-label">Valor pago (R$)</label>
+          <input class="form-input" id="group-pay-amount" type="number" inputmode="decimal" placeholder="Ex: 100" autofocus />
+        </div>
+        <button class="btn-primary" onclick="confirmGroupPayment()">Registrar pagamento</button>
+        <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+      </div>
+    </div>`;
+  }
+
+  if (state.modal === 'groupReminderDays') {
+    const rem = state._reminderGroupRemaining || 0;
+    return `<div class="modal-overlay">
+      <div class="modal-sheet">
+        <div class="modal-title">Pagamento parcial registrado</div>
+        <div class="modal-subtitle">Ainda faltam R$ ${rem.toLocaleString('pt-BR')}. Em quantos dias deseja ser relembrada?</div>
+        <div class="form-group">
+          <select class="form-input" id="group-reminder-days">
+            <option value="1">1 dia</option>
+            <option value="2">2 dias</option>
+            <option value="3">3 dias</option>
+            <option value="5" selected>5 dias</option>
+            <option value="7">7 dias</option>
+            <option value="10">10 dias</option>
+            <option value="15">15 dias</option>
+            <option value="30">30 dias</option>
+          </select>
+        </div>
+        <button class="btn-primary" onclick="confirmGroupReminder()">Confirmar</button>
+        <button class="btn-cancel" onclick="closeModal()">Pular</button>
       </div>
     </div>`;
   }
