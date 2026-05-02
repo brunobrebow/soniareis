@@ -304,9 +304,11 @@ async function addContact() {
   const name = document.getElementById('nc-name').value.trim();
   const local = document.getElementById('nc-local').value.trim();
   const phone = document.getElementById('nc-phone').value.replace(/\D/g, '');
-  if (!name || !local || !phone) { showToast('Preencha todos os campos', '#A32D2D'); return; }
+  const birthday = document.getElementById('nc-birthday')?.value || null;
+  const cpf = document.getElementById('nc-cpf')?.value?.replace(/\D/g, '') || null;
+  if (!name || !phone) { showToast('Nome e WhatsApp são obrigatórios', '#A32D2D'); return; }
   try {
-    const newContact = await DB.addContact({ name, local, phone: '55' + phone });
+    const newContact = await DB.addContact({ name, local: local || '', phone: '55' + phone, birthday, cpf });
     state.contacts.push(newContact);
     state.contacts.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
     closeModal();
@@ -324,9 +326,11 @@ async function editContact(id) {
   const name = document.getElementById('ec-name').value.trim();
   const local = document.getElementById('ec-local').value.trim();
   const phone = document.getElementById('ec-phone').value.replace(/\D/g, '');
-  if (!name || !local || !phone) { showToast('Preencha todos os campos', '#A32D2D'); return; }
+  const birthday = document.getElementById('ec-birthday')?.value || null;
+  const cpf = document.getElementById('ec-cpf')?.value?.replace(/\D/g, '') || null;
+  if (!name || !phone) { showToast('Nome e WhatsApp são obrigatórios', '#A32D2D'); return; }
   try {
-    const updated = await DB.updateContact(id, { name, local, phone: '55' + phone });
+    const updated = await DB.updateContact(id, { name, local: local || '', phone: '55' + phone, birthday, cpf });
     const idx = state.contacts.findIndex(c => c.id === id);
     if (idx >= 0) state.contacts[idx] = updated;
     state.contacts.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
@@ -605,9 +609,11 @@ async function pdvAddContact() {
   const name = document.getElementById('pdv-nc-name')?.value?.trim();
   const local = document.getElementById('pdv-nc-local')?.value?.trim();
   const phone = document.getElementById('pdv-nc-phone')?.value?.replace(/\D/g, '');
+  const birthday = document.getElementById('pdv-nc-birthday')?.value || null;
+  const cpf = document.getElementById('pdv-nc-cpf')?.value?.replace(/\D/g, '') || null;
   if (!name || !phone) { showToast('Nome e WhatsApp são obrigatórios', '#A32D2D'); return; }
   try {
-    const nc = await DB.addContact({ name, local: local || '', phone: '55' + phone });
+    const nc = await DB.addContact({ name, local: local || '', phone: '55' + phone, birthday, cpf });
     state.contacts.push(nc);
     state.contacts.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
     state.modal = null;
@@ -651,9 +657,11 @@ async function pdvSaveEditContact() {
   const name = document.getElementById('pdv-ec-name')?.value?.trim();
   const local = document.getElementById('pdv-ec-local')?.value?.trim();
   const phone = document.getElementById('pdv-ec-phone')?.value?.replace(/\D/g, '');
+  const birthday = document.getElementById('pdv-ec-birthday')?.value || null;
+  const cpf = document.getElementById('pdv-ec-cpf')?.value?.replace(/\D/g, '') || null;
   if (!name || !phone) { showToast('Nome e WhatsApp são obrigatórios', '#A32D2D'); return; }
   try {
-    const updated = await DB.updateContact(id, { name, local: local || '', phone: '55' + phone });
+    const updated = await DB.updateContact(id, { name, local: local || '', phone: '55' + phone, birthday, cpf });
     const idx = state.contacts.findIndex(c => c.id === id);
     if (idx >= 0) state.contacts[idx] = updated;
     state.contacts.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
@@ -967,6 +975,8 @@ function renderPDV() {
             <div class="form-group"><label class="form-label">Nome</label><input class="form-input" id="pdv-nc-name" placeholder="Ex: Renata Lima" /></div>
             <div class="form-group"><label class="form-label">Local</label><input class="form-input" id="pdv-nc-local" placeholder="Ex: Posto de Saúde" /></div>
             <div class="form-group"><label class="form-label">WhatsApp (com DDD)</label><input class="form-input" id="pdv-nc-phone" type="tel" placeholder="43 99999-0000" /></div>
+            <div class="form-group"><label class="form-label">Data de nascimento</label><input class="form-input" id="pdv-nc-birthday" type="date" /></div>
+            <div class="form-group"><label class="form-label">CPF</label><input class="form-input" id="pdv-nc-cpf" type="tel" placeholder="000.000.000-00" inputmode="numeric" /></div>
             <button class="btn-primary" onclick="pdvAddContact()">Cadastrar</button>
             <button class="btn-cancel" onclick="state.modal=null;render()">Cancelar</button>
           </div>
@@ -981,6 +991,8 @@ function renderPDV() {
             <div class="form-group"><label class="form-label">Nome</label><input class="form-input" id="pdv-ec-name" value="${ec.name}" /></div>
             <div class="form-group"><label class="form-label">Local</label><input class="form-input" id="pdv-ec-local" value="${ec.local || ''}" /></div>
             <div class="form-group"><label class="form-label">WhatsApp (com DDD)</label><input class="form-input" id="pdv-ec-phone" type="tel" value="${ph}" /></div>
+            <div class="form-group"><label class="form-label">Data de nascimento</label><input class="form-input" id="pdv-ec-birthday" type="date" value="${ec.birthday || ''}" /></div>
+            <div class="form-group"><label class="form-label">CPF</label><input class="form-input" id="pdv-ec-cpf" type="tel" placeholder="000.000.000-00" inputmode="numeric" value="${ec.cpf || ''}" /></div>
             <button class="btn-primary" onclick="pdvSaveEditContact()">Salvar</button>
             <button class="btn-cancel" onclick="state.modal=null;render()">Cancelar</button>
           </div>
@@ -2049,6 +2061,8 @@ function renderDetail(contactId) {
         <h3>Informações</h3>
         <div class="info-row"><span class="info-label">WhatsApp</span><span class="info-value" style="color:#25D366">+${c.phone}</span></div>
         <div class="info-row"><span class="info-label">Local</span><span class="info-value">${c.local || '—'}</span></div>
+        <div class="info-row"><span class="info-label">Nascimento</span><span class="info-value">${c.birthday ? new Date(c.birthday + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</span></div>
+        <div class="info-row"><span class="info-label">CPF</span><span class="info-value">${c.cpf ? c.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : '—'}</span></div>
         <div class="info-row"><span class="info-label">Cliente desde</span><span class="info-value">${clientSince ? clientSince.toLocaleDateString('pt-BR') : '—'}</span></div>
         <div class="info-row"><span class="info-label">A receber</span><span class="info-value" style="color:${totalPending > 0 ? '#993556' : '#3B6D11'}">R$ ${totalPending.toLocaleString('pt-BR')}</span></div>
         <div style="display:flex;gap:8px;margin-top:12px">
@@ -2365,6 +2379,8 @@ function renderModal() {
         <div class="form-group"><label class="form-label">Nome completo</label><input class="form-input" id="nc-name" placeholder="Ex: Renata Lima" /></div>
         <div class="form-group"><label class="form-label">Local</label><input class="form-input" id="nc-local" placeholder="Ex: Posto de Saúde 1" /></div>
         <div class="form-group"><label class="form-label">WhatsApp (com DDD)</label><input class="form-input" id="nc-phone" type="tel" placeholder="43 99999-0000" /></div>
+        <div class="form-group"><label class="form-label">Data de nascimento</label><input class="form-input" id="nc-birthday" type="date" /></div>
+        <div class="form-group"><label class="form-label">CPF</label><input class="form-input" id="nc-cpf" type="tel" placeholder="000.000.000-00" inputmode="numeric" /></div>
         <button class="btn-primary" onclick="addContact()">Cadastrar cliente</button>
         <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
       </div>
@@ -2381,6 +2397,8 @@ function renderModal() {
         <div class="form-group"><label class="form-label">Nome completo</label><input class="form-input" id="ec-name" value="${c.name}" /></div>
         <div class="form-group"><label class="form-label">Local</label><input class="form-input" id="ec-local" value="${c.local || ''}" /></div>
         <div class="form-group"><label class="form-label">WhatsApp (com DDD)</label><input class="form-input" id="ec-phone" type="tel" value="${phoneDisplay}" /></div>
+        <div class="form-group"><label class="form-label">Data de nascimento</label><input class="form-input" id="ec-birthday" type="date" value="${c.birthday || ''}" /></div>
+        <div class="form-group"><label class="form-label">CPF</label><input class="form-input" id="ec-cpf" type="tel" placeholder="000.000.000-00" inputmode="numeric" value="${c.cpf || ''}" /></div>
         <button class="btn-primary" onclick="editContact('${c.id}')">Salvar alterações</button>
         <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
       </div>
