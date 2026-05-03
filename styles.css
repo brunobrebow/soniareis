@@ -393,6 +393,12 @@ body {
 .agenda-event-sub { font-size: 12px; color: #888; margin-top: 3px; }
 .agenda-event-del { background: none; border: none; color: #ccc; font-size: 16px; cursor: pointer; padding: 0 4px; }
 
+.agenda-event-done { opacity: 0.7; }
+.agenda-event-done .agenda-event-title { text-decoration: line-through; color: #3B6D11; }
+.agenda-check-btn { width: 28px; height: 28px; border-radius: 50%; border: 2px solid #ccc; background: none; color: #ccc; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.agenda-check-done { border-color: #3B6D11; background: #3B6D11; color: white; }
+.agenda-bday-btn { padding: 6px 10px; background: #25D366; border: none; border-radius: 8px; color: white; font-size: 11px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+
 /* ─── FINANCE TRANSACTIONS ─── */
 .fin-transaction { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid #f5f5f5; }
 .fin-tx-left { flex: 1; min-width: 0; }

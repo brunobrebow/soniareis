@@ -117,20 +117,13 @@ function getAgendaDayEvents(date) {
   const d = date.getDate(), m = date.getMonth(), y = date.getFullYear();
   const events = [];
 
-  // Manual appointments
-  getAgendaEvents().forEach(e => {
-    const ed = new Date(e.date);
-    if (ed.getDate() === d && ed.getMonth() === m && ed.getFullYear() === y) {
-      events.push({ type: 'compromisso', title: e.title, time: e.time || '', location: e.location || '', id: e.id, color: '#5B6ABF' });
-    }
-  });
-
   // Charges due
   getDueCharges('mes').forEach(c => {
     if (!c.contact) return;
     const pd = c.parcel.date;
     if (pd.getDate() === d && pd.getMonth() === m && pd.getFullYear() === y && !c.parcel.paid) {
-      events.push({ type: 'cobranca', title: `Cobrar ${c.contact.name.split(' ').slice(0,2).join(' ')}`, sub: `R$ ${c.parcel.remaining} · ${c.sale.description}`, color: '#D4537E', sale: c.sale, contact: c.contact, parcel: c.parcel });
+      const cobrada = isCobrada(c.sale.id, c.parcel.index) || c.parcel.paid;
+      events.push({ type: 'cobranca', title: `Cobrar ${c.contact.name.split(' ').slice(0,2).join(' ')}`, sub: `R$ ${c.parcel.remaining} · ${c.sale.description}`, color: cobrada ? '#3B6D11' : '#D4537E', done: cobrada, sale: c.sale, contact: c.contact, parcel: c.parcel });
     }
   });
 
@@ -139,11 +132,50 @@ function getAgendaDayEvents(date) {
     if (!c.birthday) return;
     const [by, bm, bd] = c.birthday.split('-').map(Number);
     if (bm === m + 1 && bd === d) {
-      events.push({ type: 'aniversario', title: `🎂 ${c.name}`, sub: `${y - by} anos`, color: '#E8A317' });
+      const bdayDone = isBdaySent(c.id, y);
+      events.push({ type: 'aniversario', title: `🎂 ${c.name}`, sub: `${y - by} anos`, color: bdayDone ? '#3B6D11' : '#E8A317', done: bdayDone, contactId: c.id, phone: c.phone });
+    }
+  });
+
+  // Manual appointments
+  getAgendaEvents().forEach(e => {
+    const ed = new Date(e.date);
+    if (ed.getDate() === d && ed.getMonth() === m && ed.getFullYear() === y) {
+      events.push({ type: 'compromisso', title: e.title, time: e.time || '', location: e.location || '', id: e.id, color: e.done ? '#3B6D11' : '#5B6ABF', done: e.done || false });
     }
   });
 
   return events;
+}
+
+// Birthday tracking
+function isBdaySent(contactId, year) {
+  try {
+    const sent = JSON.parse(localStorage.getItem('srcrm_bday_sent') || '{}');
+    return sent[`${contactId}-${year}`] || false;
+  } catch { return false; }
+}
+function markBdaySent(contactId, year) {
+  const sent = JSON.parse(localStorage.getItem('srcrm_bday_sent') || '{}');
+  sent[`${contactId}-${year}`] = true;
+  localStorage.setItem('srcrm_bday_sent', JSON.stringify(sent));
+}
+function sendBdayAndMark(contactId, phone) {
+  const msg = encodeURIComponent(`Feliz aniversário!! 🎂🎉\nMuitas felicidades, saúde e bençãos pra você! Que esse novo ano seja incrível! 💖`);
+  markBdaySent(contactId, new Date().getFullYear());
+  window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
+  render();
+}
+
+// Manual event completion
+function toggleAgendaDone(eventId) {
+  const events = getAgendaEvents();
+  const evt = events.find(e => e.id === eventId);
+  if (evt) {
+    evt.done = !evt.done;
+    localStorage.setItem('srcrm_agenda', JSON.stringify(events));
+    render();
+  }
 }
 
 function getGroupChargeUrl(contact, charges) {
@@ -2096,16 +2128,24 @@ function renderAgenda() {
       <div style="padding:0 16px">
         ${dayEvents.length === 0 ? '<div style="text-align:center;color:#aaa;font-size:14px;padding:20px 0">Nenhum evento neste dia</div>' : ''}
         ${dayEvents.map(e => `
-          <div class="agenda-event" style="border-left:3px solid ${e.color}${e.type === 'cobranca' ? ';cursor:pointer' : ''}" ${e.type === 'cobranca' && e.sale ? `onclick="openAgendaCharge('${e.sale.id}','${e.contact?.id}')"` : ''}>
+          <div class="agenda-event ${e.done ? 'agenda-event-done' : ''}" style="border-left:3px solid ${e.color}${e.type === 'cobranca' && !e.done ? ';cursor:pointer' : ''}" ${e.type === 'cobranca' && e.sale && !e.done ? `onclick="openAgendaCharge('${e.sale.id}','${e.contact?.id}')"` : ''}>
             <div class="agenda-event-header">
-              <div>
-                <div class="agenda-event-title">${e.title}</div>
+              <div style="flex:1">
+                <div class="agenda-event-title">${e.done ? '✅ ' : ''}${e.title}</div>
                 ${e.sub ? `<div class="agenda-event-sub">${e.sub}</div>` : ''}
                 ${e.time ? `<div class="agenda-event-sub">⏰ ${e.time}</div>` : ''}
                 ${e.location ? `<div class="agenda-event-sub">📍 ${e.location}</div>` : ''}
               </div>
-              ${e.type === 'compromisso' && e.id ? `<button class="agenda-event-del" onclick="event.stopPropagation();deleteAgendaEvent('${e.id}');render()">✕</button>` : ''}
-              ${e.type === 'cobranca' ? '<span style="color:#aaa;font-size:16px">›</span>' : ''}
+              ${e.type === 'compromisso' && e.id ? `
+                <div style="display:flex;gap:8px;align-items:center">
+                  <button class="agenda-check-btn ${e.done ? 'agenda-check-done' : ''}" onclick="event.stopPropagation();toggleAgendaDone('${e.id}')">${e.done ? '✓' : '○'}</button>
+                  <button class="agenda-event-del" onclick="event.stopPropagation();deleteAgendaEvent('${e.id}');render()">✕</button>
+                </div>
+              ` : ''}
+              ${e.type === 'aniversario' && !e.done ? `
+                <button class="agenda-bday-btn" onclick="event.stopPropagation();sendBdayAndMark('${e.contactId}','${e.phone}')">Felicitar 💖</button>
+              ` : ''}
+              ${e.type === 'cobranca' && !e.done ? '<span style="color:#aaa;font-size:16px">›</span>' : ''}
             </div>
           </div>
         `).join('')}
@@ -2660,7 +2700,6 @@ function renderModal() {
           ${bdays.map(c => {
             const [y] = c.birthday.split('-');
             const age = today.getFullYear() - parseInt(y);
-            const bdayMsg = encodeURIComponent(`Feliz aniversário!! 🎂🎉\nMuitas felicidades, saúde e bençãos pra você! Que esse novo ano seja incrível! 💖`);
             const ci = getColorIndex(c.id);
             return `<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #f5f5f5">
               <div class="avatar" style="width:40px;height:40px;font-size:13px;background:${COLORS[ci]};color:${TEXT_COLORS[ci]}">${getInitials(c.name)}</div>
@@ -2668,7 +2707,7 @@ function renderModal() {
                 <div style="font-size:15px;font-weight:500;color:#1a1a1a">${c.name}</div>
                 <div style="font-size:12px;color:#aaa">${age} anos</div>
               </div>
-              <a href="https://wa.me/${c.phone}?text=${bdayMsg}" target="_blank" style="padding:6px 12px;background:#25D366;border:none;border-radius:8px;color:white;font-size:12px;text-decoration:none;font-weight:500">Felicitar 💖</a>
+              <button onclick="sendBdayAndMark('${c.id}','${c.phone}');closeModal()" style="padding:6px 12px;background:#25D366;border:none;border-radius:8px;color:white;font-size:12px;font-weight:500;cursor:pointer">Felicitar 💖</button>
             </div>`;
           }).join('')}
         ` : '<div style="text-align:center;color:#aaa;padding:12px 0;font-size:14px">Nenhum aniversário hoje</div>'}
