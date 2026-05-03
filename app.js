@@ -1827,9 +1827,29 @@ function renderContatos() {
     (c.local || '').toLowerCase().includes(state.search.toLowerCase())
   );
   const pendingByContact = {};
+  // Group sales by contact + transaction (same minute)
+  const txByContact = {};
   state.sales.forEach(s => {
-    const pending = getSaleParcels(s).filter(p => !p.paid).length;
-    if (pending) pendingByContact[s.contact_id] = (pendingByContact[s.contact_id] || 0) + pending;
+    const t = new Date(s.created_at);
+    const txKey = `${t.getFullYear()}-${t.getMonth()}-${t.getDate()}-${t.getHours()}-${t.getMinutes()}`;
+    const cKey = s.contact_id;
+    if (!txByContact[cKey]) txByContact[cKey] = {};
+    if (!txByContact[cKey][txKey]) txByContact[cKey][txKey] = [];
+    txByContact[cKey][txKey].push(s);
+  });
+  Object.entries(txByContact).forEach(([contactId, txs]) => {
+    let count = 0;
+    Object.values(txs).forEach(sales => {
+      const numParcels = sales[0]?.parcels || 1;
+      for (let pi = 0; pi < numParcels; pi++) {
+        const hasPending = sales.some(s => {
+          const pm = state.payments.find(p => p.sale_id === s.id && p.parcel_index === pi);
+          return pm && !pm.paid;
+        });
+        if (hasPending) count++;
+      }
+    });
+    if (count > 0) pendingByContact[contactId] = count;
   });
 
   return `
