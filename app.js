@@ -139,8 +139,8 @@ function getAgendaDayEvents(date) {
 
   // Manual appointments
   getAgendaEvents().forEach(e => {
-    const ed = new Date(e.date);
-    if (ed.getDate() === d && ed.getMonth() === m && ed.getFullYear() === y) {
+    const [ey, em, ed2] = e.date.split('-').map(Number);
+    if (ed2 === d && (em - 1) === m && ey === y) {
       events.push({ type: 'compromisso', title: e.title, time: e.time || '', location: e.location || '', id: e.id, color: e.done ? '#3B6D11' : '#5B6ABF', done: e.done || false });
     }
   });
@@ -2167,12 +2167,12 @@ function agendaSelectDay(day) {
 
 function addAgendaEvent() {
   const title = document.getElementById('agenda-title')?.value?.trim();
-  const date = document.getElementById('agenda-date')?.value;
   const time = document.getElementById('agenda-time')?.value || '';
   const location = document.getElementById('agenda-location')?.value?.trim() || '';
-  if (!title || !date) { showToast('Título e data são obrigatórios', '#A32D2D'); return; }
+  if (!title) { showToast('Digite o título do compromisso', '#A32D2D'); return; }
+  const d = state.agendaDate || new Date();
+  const date = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   saveAgendaEvent({ title, date, time, location });
-  state.agendaDate = new Date(date + 'T12:00:00');
   closeModal();
   showToast('Compromisso adicionado!');
 }
@@ -2648,13 +2648,14 @@ function renderModal() {
   }
 
   if (state.modal === 'addAgenda') {
-    const today = new Date();
-    const defaultDate = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    const d = state.agendaDate || new Date();
+    const meses = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+    const dateLabel = `${d.getDate()} de ${meses[d.getMonth()]} de ${d.getFullYear()}`;
     return `<div class="modal-overlay" onclick="closeModal()">
       <div class="modal-sheet" onclick="event.stopPropagation()">
         <div class="modal-title">Novo compromisso</div>
+        <div class="modal-subtitle">📅 ${dateLabel}</div>
         <div class="form-group"><label class="form-label">Título</label><input class="form-input" id="agenda-title" placeholder="Ex: Visitar cliente" autofocus /></div>
-        <div class="form-group"><label class="form-label">Data</label><input class="form-input" id="agenda-date" type="date" value="${defaultDate}" /></div>
         <div class="form-group"><label class="form-label">Horário (opcional)</label><input class="form-input" id="agenda-time" type="time" /></div>
         <div class="form-group"><label class="form-label">Local (opcional)</label><input class="form-input" id="agenda-location" placeholder="Ex: UBS Central" /></div>
         <button class="btn-primary" onclick="addAgendaEvent()">Adicionar</button>
