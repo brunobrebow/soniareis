@@ -1320,17 +1320,15 @@ function confirmReminder() {
 function openGroupPayment(contactId) {
   const contact = getContact(contactId);
   if (!contact) return;
-  const cSales = state.sales.filter(s => s.contact_id === contactId);
+  // Only include parcels that are due today or overdue (matching cobranças view)
+  const allDueCharges = getDueCharges('mes');
+  const contactCharges = allDueCharges.filter(c => c.contact?.id === contactId && (c.isPast || c.isToday));
   let totalPending = 0;
   const pendingParcels = [];
-  cSales.forEach(s => {
-    getSaleParcels(s).forEach(p => {
-      if (!p.paid) {
-        const rem = Math.round(p.remaining || p.amount);
-        totalPending += rem;
-        pendingParcels.push({ saleId: s.id, parcelIndex: p.index, remaining: rem });
-      }
-    });
+  contactCharges.forEach(c => {
+    const rem = Math.round(c.parcel.remaining || c.parcel.amount);
+    totalPending += rem;
+    pendingParcels.push({ saleId: c.sale.id, parcelIndex: c.parcel.index, remaining: rem });
   });
   state._groupPayment = { contactId, contactName: contact.name, totalPending, pendingParcels: pendingParcels.sort((a, b) => a.parcelIndex - b.parcelIndex) };
   state.modal = 'groupPayment';
@@ -1440,6 +1438,108 @@ async function undoParcelPayment(saleId, parcelIndex) {
     pm.paid_at = null;
     pm.paid_amount = 0;
     showToast('Pagamento desfeito!');
+    render();
+  } catch (e) {
+    showToast('Erro ao desfazer.', '#A32D2D');
+    console.error(e);
+  }
+}
+
+async function openTransactionPaidModal(saleIdsStr, parcelIndex) {
+  const saleIds = saleIdsStr.split(',');
+  let totalAmount = 0;
+  const refs = [];
+  saleIds.forEach(saleId => {
+    const sale = state.sales.find(s => s.id === saleId);
+    const pm = state.payments.find(p => p.sale_id === saleId && p.parcel_index === parcelIndex);
+    if (sale && pm && !pm.paid) {
+      const rem = Math.round(sale.parcel_value - (pm.paid_amount || 0));
+      totalAmount += rem;
+      refs.push({ saleId, parcelIndex, remaining: rem });
+    }
+  });
+  state._txPaidModal = { saleIds, parcelIndex, totalAmount, refs };
+  state.modal = 'txPaid';
+  render();
+}
+
+async function confirmTransactionPaid() {
+  const tp = state._txPaidModal;
+  if (!tp) return;
+  try {
+    for (const ref of tp.refs) {
+      const sale = state.sales.find(s => s.id === ref.saleId);
+      const pm = state.payments.find(p => p.sale_id === ref.saleId && p.parcel_index === ref.parcelIndex);
+      if (!sale || !pm) continue;
+      const totalPaid = Math.round(sale.parcel_value);
+      await DB.markPaid(ref.saleId, ref.parcelIndex, totalPaid, true);
+      pm.paid = true;
+      pm.paid_amount = totalPaid;
+      pm.paid_at = new Date().toISOString();
+    }
+    state.modal = null;
+    showToast('Parcela registrada!');
+    render();
+  } catch (e) {
+    showToast('Erro ao registrar.', '#A32D2D');
+    console.error(e);
+  }
+}
+
+async function confirmTransactionPartial() {
+  const val = parseFloat(document.getElementById('tx-paid-amount')?.value) || 0;
+  const tp = state._txPaidModal;
+  if (!tp || val <= 0) { showToast('Insira um valor válido', '#A32D2D'); return; }
+  const amount = Math.min(Math.round(val), tp.totalAmount);
+  const payTimestamp = new Date().toISOString();
+  let leftover = amount;
+  try {
+    for (const ref of tp.refs) {
+      if (leftover <= 0) break;
+      const sale = state.sales.find(s => s.id === ref.saleId);
+      const pm = state.payments.find(p => p.sale_id === ref.saleId && p.parcel_index === ref.parcelIndex);
+      if (!sale || !pm) continue;
+      const parcelRem = Math.round(sale.parcel_value - (pm.paid_amount || 0));
+      const payAmt = Math.min(leftover, parcelRem);
+      leftover -= payAmt;
+      const totalPaid = Math.round((pm.paid_amount || 0) + payAmt);
+      const isFull = totalPaid >= sale.parcel_value;
+      await DB.markPaid(ref.saleId, ref.parcelIndex, totalPaid, isFull);
+      pm.paid_amount = totalPaid;
+      if (isFull) pm.paid = true;
+      pm.paid_at = payTimestamp;
+    }
+    const isFullPayment = amount >= tp.totalAmount;
+    state.modal = null;
+    showToast(`R$ ${amount.toLocaleString('pt-BR')} registrado!`);
+    if (!isFullPayment) {
+      const newRemaining = Math.round(tp.totalAmount - amount);
+      state._reminderSaleId = tp.refs[0]?.saleId;
+      state._reminderParcelIndex = tp.parcelIndex;
+      state._reminderRemaining = newRemaining;
+      state.modal = 'reminderDays';
+    }
+    render();
+  } catch (e) {
+    showToast('Erro ao registrar.', '#A32D2D');
+    console.error(e);
+  }
+}
+
+async function undoTransactionParcel(saleIdsStr, parcelIndex) {
+  if (!confirm('Desfazer esta parcela?')) return;
+  const saleIds = saleIdsStr.split(',');
+  try {
+    for (const saleId of saleIds) {
+      const pm = state.payments.find(p => p.sale_id === saleId && p.parcel_index === parcelIndex);
+      if (pm && pm.paid) {
+        await DB.undoPayment(pm.id);
+        pm.paid = false;
+        pm.paid_at = null;
+        pm.paid_amount = 0;
+      }
+    }
+    showToast('Parcela desfeita!');
     render();
   } catch (e) {
     showToast('Erro ao desfazer.', '#A32D2D');
@@ -2128,34 +2228,61 @@ function renderDetail(contactId) {
           return groups.map(g => {
             const gTotal = g.sales.reduce((a, s) => a + s.total, 0);
             const method = g.sales[0]?.payment_method || 'pix';
+            const numParcels = g.sales[0]?.parcels || 1;
+            const day = g.sales[0]?.start_day || 1;
+
+            // Build unified parcels across all sales in transaction
+            const unifiedParcels = [];
+            for (let pi = 0; pi < numParcels; pi++) {
+              let totalAmount = 0;
+              let totalPaid = 0;
+              let isPaid = true;
+              let paidAt = null;
+              const parcelSaleRefs = [];
+              g.sales.forEach(s => {
+                const p = getSaleParcels(s).find(pp => pp.index === pi);
+                if (p) {
+                  totalAmount += p.amount;
+                  totalPaid += p.paidAmount;
+                  if (!p.paid) isPaid = false;
+                  if (p.paidAt && (!paidAt || p.paidAt > paidAt)) paidAt = p.paidAt;
+                  parcelSaleRefs.push({ saleId: s.id, parcelIndex: pi });
+                }
+              });
+              const remaining = Math.round(totalAmount - totalPaid);
+              const firstSaleParcel = getSaleParcels(g.sales[0]).find(pp => pp.index === pi);
+              unifiedParcels.push({
+                index: pi, amount: Math.round(totalAmount), paidAmount: Math.round(totalPaid),
+                remaining, paid: isPaid, paidAt,
+                dateStr: firstSaleParcel?.dateStr || '',
+                saleRefs: parcelSaleRefs
+              });
+            }
+
             return `
               <div class="transaction-group">
                 <div class="transaction-header">
                   <div>
-                    <div style="font-size:13px;color:#888">${g.date} · ${g.sales.length} ${g.sales.length === 1 ? 'item' : 'itens'}</div>
-                    <div style="font-size:16px;font-weight:600;color:#1a1a1a;margin-top:2px">R$ ${gTotal.toLocaleString('pt-BR')}</div>
+                    <div style="font-size:13px;color:#888">${g.date} · ${g.sales.length} ${g.sales.length === 1 ? 'item' : 'itens'} · ${method === 'pix' ? 'Pix' : 'Cartão'}</div>
+                    <div style="font-size:16px;font-weight:600;color:#1a1a1a;margin-top:2px">R$ ${gTotal.toLocaleString('pt-BR')} · ${numParcels}x R$ ${Math.round(gTotal / numParcels)} · Dia ${day}</div>
                   </div>
                   <button onclick="sendTransactionSummary('${c.id}','${g.ids.join(',')}')" style="background:#25D366;border:none;border-radius:8px;color:white;font-size:11px;padding:6px 10px;cursor:pointer;white-space:nowrap">📩 Enviar</button>
                 </div>
-                ${g.sales.map(s => {
-                  const parcels = getSaleParcels(s);
-                  return `
-                    <div class="sale-item" style="margin-top:8px">
-                      <div class="sale-desc">${s.description}</div>
-                      <div class="sale-meta">R$ ${s.total} · ${s.parcels}x R$ ${s.parcel_value} · ${s.payment_method === 'pix' ? 'Pix' : 'Cartão'}</div>
-                      <div style="margin-top:8px">
-                        ${parcels.map(p => `
-                          <div class="parcel-row">
-                            <span class="parcel-num">Parc. ${p.index + 1}</span>
-                            <span class="parcel-date">${p.dateStr}</span>
-                            <div class="parcel-status">
-                              <span class="badge ${p.paid ? 'badge-ok' : 'badge-due'}">${p.paid ? 'Pago' : 'Pendente'}</span>
-                              ${!p.paid ? `<button style="background:none;border:none;cursor:pointer;font-size:12px;color:#D4537E;padding:0" onclick="openPaidModal('${s.id}',${p.index})">Registrar</button>` : `<button style="background:none;border:none;cursor:pointer;font-size:11px;color:#A32D2D;padding:0" onclick="undoParcelPayment('${s.id}',${p.index})">Desfazer</button>`}
-                            </div>
-                          </div>`).join('')}
+                <div style="padding:8px 0 4px">
+                  ${g.sales.map(s => `<div style="font-size:13px;color:#555;padding:2px 0">• ${s.description} — R$ ${s.total}</div>`).join('')}
+                </div>
+                <div style="margin-top:4px">
+                  ${unifiedParcels.map(p => `
+                    <div class="parcel-row">
+                      <span class="parcel-num">Parc. ${p.index + 1}</span>
+                      <span class="parcel-date">${p.dateStr}</span>
+                      <span style="font-size:13px;color:#1a1a1a;font-weight:500">R$ ${p.amount}</span>
+                      <div class="parcel-status">
+                        <span class="badge ${p.paid ? 'badge-ok' : 'badge-due'}">${p.paid ? 'Pago' : 'R$ ' + p.remaining}</span>
+                        ${!p.paid ? `<button style="background:none;border:none;cursor:pointer;font-size:12px;color:#D4537E;padding:0" onclick="openTransactionPaidModal('${g.ids.join(',')}',${p.index})">Registrar</button>` : `<button style="background:none;border:none;cursor:pointer;font-size:11px;color:#A32D2D;padding:0" onclick="undoTransactionParcel('${g.ids.join(',')}',${p.index})">Desfazer</button>`}
                       </div>
-                    </div>`;
-                }).join('')}
+                    </div>`).join('')}
+                </div>
               </div>`;
           }).join('');
         })()}
@@ -2321,6 +2448,23 @@ function renderModal() {
           </div>
         `}
         <button class="btn-cancel" onclick="closeModal()">Fechar</button>
+      </div>
+    </div>`;
+  }
+
+  if (state.modal === 'txPaid' && state._txPaidModal) {
+    const tp = state._txPaidModal;
+    return `<div class="modal-overlay" onclick="closeModal()">
+      <div class="modal-sheet" onclick="event.stopPropagation()">
+        <div class="modal-title">Registrar parcela</div>
+        <div class="modal-subtitle">Valor da parcela: R$ ${tp.totalAmount.toLocaleString('pt-BR')}</div>
+        <button class="btn-primary" onclick="confirmTransactionPaid()">Pagar R$ ${tp.totalAmount} (parcela completa)</button>
+        <div style="text-align:center;color:#aaa;font-size:13px;padding:8px 0">ou valor parcial:</div>
+        <div class="form-group">
+          <input class="form-input" id="tx-paid-amount" type="number" inputmode="decimal" placeholder="Valor pago" />
+        </div>
+        <button class="btn-primary" style="background:#666" onclick="confirmTransactionPartial()">Registrar valor parcial</button>
+        <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
       </div>
     </div>`;
   }
