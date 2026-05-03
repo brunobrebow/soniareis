@@ -2146,9 +2146,29 @@ function renderDetail(contactId) {
     const sale = cSales.find(s => s.id === p.sale_id);
     return a + (p.paid_amount || sale?.parcel_value || 0);
   }, 0);
-  const pendingParcels = state.payments.filter(p => {
-    return cSales.some(s => s.id === p.sale_id) && !p.paid;
-  }).length;
+  const pendingParcels = (() => {
+    // Group sales by transaction (same minute)
+    const txGroups = {};
+    cSales.forEach(s => {
+      const t = new Date(s.created_at);
+      const key = `${t.getFullYear()}-${t.getMonth()}-${t.getDate()}-${t.getHours()}-${t.getMinutes()}`;
+      if (!txGroups[key]) txGroups[key] = [];
+      txGroups[key].push(s);
+    });
+    // Count pending unified parcels per transaction
+    let count = 0;
+    Object.values(txGroups).forEach(sales => {
+      const numParcels = sales[0]?.parcels || 1;
+      for (let pi = 0; pi < numParcels; pi++) {
+        const hasPending = sales.some(s => {
+          const pm = state.payments.find(p => p.sale_id === s.id && p.parcel_index === pi);
+          return pm && !pm.paid;
+        });
+        if (hasPending) count++;
+      }
+    });
+    return count;
+  })();
   const clientSince = c.created_at ? new Date(c.created_at) : null;
   const now = new Date();
   let tempoCliente = '';
@@ -2202,7 +2222,14 @@ function renderDetail(contactId) {
           <div class="client-stat"><div class="client-stat-value">R$ ${totalPaid.toLocaleString('pt-BR')}</div><div class="client-stat-label">total pago</div></div>
           <div class="client-stat"><div class="client-stat-value">R$ ${mediaMensal.toLocaleString('pt-BR')}</div><div class="client-stat-label">média/mês</div></div>
           <div class="client-stat"><div class="client-stat-value">${pendingParcels}</div><div class="client-stat-label">parcelas pendentes</div></div>
-          <div class="client-stat"><div class="client-stat-value">${cSales.length}</div><div class="client-stat-label">vendas</div></div>
+          <div class="client-stat"><div class="client-stat-value">${(() => {
+            const txKeys = new Set();
+            cSales.forEach(s => {
+              const t = new Date(s.created_at);
+              txKeys.add(`${t.getFullYear()}-${t.getMonth()}-${t.getDate()}-${t.getHours()}-${t.getMinutes()}`);
+            });
+            return txKeys.size;
+          })()}</div><div class="client-stat-label">vendas</div></div>
           <div class="client-stat"><div class="client-stat-value">${tempoCliente || '—'}</div><div class="client-stat-label">como cliente</div></div>
         </div>
       </div>
