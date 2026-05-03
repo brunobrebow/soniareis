@@ -1961,14 +1961,11 @@ function renderContatos() {
   Object.entries(txByContact).forEach(([contactId, txs]) => {
     let count = 0;
     Object.values(txs).forEach(sales => {
-      const numParcels = sales[0]?.parcels || 1;
-      for (let pi = 0; pi < numParcels; pi++) {
-        const hasPending = sales.some(s => {
-          const pm = state.payments.find(p => p.sale_id === s.id && p.parcel_index === pi);
-          return pm && !pm.paid;
-        });
-        if (hasPending) count++;
-      }
+      // Check if this transaction has ANY unpaid parcel
+      const hasAnyPending = sales.some(s => {
+        return state.payments.some(p => p.sale_id === s.id && !p.paid);
+      });
+      if (hasAnyPending) count++;
     });
     if (count > 0) pendingByContact[contactId] = count;
   });
@@ -2290,27 +2287,28 @@ function renderFinanceiro() {
 
   if (sel === 'recebido') {
     listTitle = 'Pagamentos recebidos';
-    // Group payments by contact + timestamp (same minute = same payment event)
+    // Group payments by contact
     const paymentGroups = {};
     paidInPeriod.forEach(p => {
       const sale = state.sales.find(s => s.id === p.sale_id);
       if (!sale) return;
       const contact = getContact(sale.contact_id);
-      const ts = p.paid_at ? new Date(p.paid_at) : new Date();
-      const groupKey = `${sale.contact_id}-${ts.getFullYear()}-${ts.getMonth()}-${ts.getDate()}-${ts.getHours()}-${ts.getMinutes()}`;
+      const groupKey = sale.contact_id;
       if (!paymentGroups[groupKey]) {
-        paymentGroups[groupKey] = { contact, date: ts, total: 0, payments: [], sales: [] };
+        paymentGroups[groupKey] = { contact, total: 0, payments: [], sales: [] };
       }
       paymentGroups[groupKey].total += Math.round(p.paid_amount || sale.parcel_value);
       paymentGroups[groupKey].payments.push(p);
-      paymentGroups[groupKey].sales.push(sale);
+      if (!paymentGroups[groupKey].sales.find(s => s.id === sale.id)) {
+        paymentGroups[groupKey].sales.push(sale);
+      }
     });
     Object.values(paymentGroups).forEach(g => {
       const descs = [...new Set(g.sales.map(s => s.description))];
       transactions.push({
-        name: g.contact?.name?.split(' ').slice(0, 2).join(' ') || '—',
+        name: g.contact?.name || '—',
         desc: descs.length <= 2 ? descs.join(', ') : descs.slice(0, 2).join(', ') + ` +${descs.length - 2}`,
-        date: g.date.toLocaleDateString('pt-BR'),
+        date: `${g.payments.length} pagamento${g.payments.length > 1 ? 's' : ''}`,
         value: g.total,
         color: '#3B6D11',
         prefix: '+',
@@ -2318,7 +2316,7 @@ function renderFinanceiro() {
         paymentGroup: g.payments
       });
     });
-    transactions.sort((a, b) => new Date(b.date.split('/').reverse().join('-')) - new Date(a.date.split('/').reverse().join('-')));
+    transactions.sort((a, b) => b.value - a.value);
   } else if (sel === 'a_receber') {
     listTitle = 'Parcelas a receber';
     aReceberItems.sort((a, b) => a.parcel.date - b.parcel.date);
@@ -2438,17 +2436,13 @@ function renderDetail(contactId) {
       if (!txGroups[key]) txGroups[key] = [];
       txGroups[key].push(s);
     });
-    // Count pending unified parcels per transaction
+    // Count transactions with ANY unpaid parcel
     let count = 0;
     Object.values(txGroups).forEach(sales => {
-      const numParcels = sales[0]?.parcels || 1;
-      for (let pi = 0; pi < numParcels; pi++) {
-        const hasPending = sales.some(s => {
-          const pm = state.payments.find(p => p.sale_id === s.id && p.parcel_index === pi);
-          return pm && !pm.paid;
-        });
-        if (hasPending) count++;
-      }
+      const hasAnyPending = sales.some(s => {
+        return state.payments.some(p => p.sale_id === s.id && !p.paid);
+      });
+      if (hasAnyPending) count++;
     });
     return count;
   })();
