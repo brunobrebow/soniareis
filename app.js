@@ -130,7 +130,7 @@ function getAgendaDayEvents(date) {
     if (!c.contact) return;
     const pd = c.parcel.date;
     if (pd.getDate() === d && pd.getMonth() === m && pd.getFullYear() === y && !c.parcel.paid) {
-      events.push({ type: 'cobranca', title: `Cobrar ${c.contact.name.split(' ').slice(0,2).join(' ')}`, sub: `R$ ${c.parcel.remaining} · ${c.sale.description}`, color: '#D4537E' });
+      events.push({ type: 'cobranca', title: `Cobrar ${c.contact.name.split(' ').slice(0,2).join(' ')}`, sub: `R$ ${c.parcel.remaining} · ${c.sale.description}`, color: '#D4537E', sale: c.sale, contact: c.contact, parcel: c.parcel });
     }
   });
 
@@ -2096,7 +2096,7 @@ function renderAgenda() {
       <div style="padding:0 16px">
         ${dayEvents.length === 0 ? '<div style="text-align:center;color:#aaa;font-size:14px;padding:20px 0">Nenhum evento neste dia</div>' : ''}
         ${dayEvents.map(e => `
-          <div class="agenda-event" style="border-left:3px solid ${e.color}">
+          <div class="agenda-event" style="border-left:3px solid ${e.color}${e.type === 'cobranca' ? ';cursor:pointer' : ''}" ${e.type === 'cobranca' && e.sale ? `onclick="openAgendaCharge('${e.sale.id}','${e.contact?.id}')"` : ''}>
             <div class="agenda-event-header">
               <div>
                 <div class="agenda-event-title">${e.title}</div>
@@ -2104,7 +2104,8 @@ function renderAgenda() {
                 ${e.time ? `<div class="agenda-event-sub">⏰ ${e.time}</div>` : ''}
                 ${e.location ? `<div class="agenda-event-sub">📍 ${e.location}</div>` : ''}
               </div>
-              ${e.type === 'compromisso' && e.id ? `<button class="agenda-event-del" onclick="deleteAgendaEvent('${e.id}');render()">✕</button>` : ''}
+              ${e.type === 'compromisso' && e.id ? `<button class="agenda-event-del" onclick="event.stopPropagation();deleteAgendaEvent('${e.id}');render()">✕</button>` : ''}
+              ${e.type === 'cobranca' ? '<span style="color:#aaa;font-size:16px">›</span>' : ''}
             </div>
           </div>
         `).join('')}
@@ -2134,6 +2135,12 @@ function addAgendaEvent() {
   state.agendaDate = new Date(date + 'T12:00:00');
   closeModal();
   showToast('Compromisso adicionado!');
+}
+
+function openAgendaCharge(saleId, contactId) {
+  state._agendaChargeData = { saleId, contactId };
+  state.modal = 'agendaCharge';
+  render();
 }
 
 function renderFinanceiro() {
@@ -2561,6 +2568,43 @@ function renderModal() {
         <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
       </div>
     </div>`;
+  }
+
+  if (state.modal === 'agendaCharge' && state._agendaChargeData) {
+    const { saleId, contactId } = state._agendaChargeData;
+    const sale = state.sales.find(s => s.id === saleId);
+    const contact = getContact(contactId);
+    if (sale && contact) {
+      const parcels = getSaleParcels(sale);
+      const nextPending = parcels.find(p => !p.paid);
+      const mesesAbr = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+      const dataCompra = new Date(sale.created_at);
+      // Find all sales in same transaction
+      const txSales = state.sales.filter(s => {
+        const t1 = new Date(sale.created_at), t2 = new Date(s.created_at);
+        return s.contact_id === contactId && t1.getFullYear() === t2.getFullYear() && t1.getMonth() === t2.getMonth() && t1.getDate() === t2.getDate() && t1.getHours() === t2.getHours() && t1.getMinutes() === t2.getMinutes();
+      });
+      const txTotal = txSales.reduce((a, s) => a + s.total, 0);
+      const msg = getWhatsappMsg(contact, nextPending || parcels[0], sale);
+      const wppUrl = `https://wa.me/${contact.phone}?text=${encodeURIComponent(msg)}`;
+      return `<div class="modal-overlay" onclick="closeModal()">
+        <div class="modal-sheet" onclick="event.stopPropagation()">
+          <div class="modal-title">${contact.name}</div>
+          <div class="modal-subtitle">${dataCompra.getDate()}/${mesesAbr[dataCompra.getMonth()]}/${dataCompra.getFullYear()} · ${sale.payment_method === 'pix' ? 'Pix' : 'Cartão'}</div>
+          <div style="margin:8px 0">
+            ${txSales.map(s => `<div style="font-size:14px;color:#555;padding:4px 0">• ${s.description} — R$ ${s.total}</div>`).join('')}
+          </div>
+          <div style="margin:12px 0;font-size:14px;color:#666">
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0"><span>Total da venda</span><span style="color:#1a1a1a;font-weight:600">R$ ${txTotal}</span></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0"><span>Parcelas</span><span style="color:#1a1a1a">${sale.parcels}x de R$ ${Math.round(txTotal / sale.parcels)}</span></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0"><span>Vencimento</span><span style="color:#1a1a1a">Todo dia ${sale.start_day}</span></div>
+            ${nextPending ? `<div style="display:flex;justify-content:space-between;padding:6px 0"><span>Próxima parcela</span><span style="color:#D4537E;font-weight:600">R$ ${nextPending.remaining} · ${nextPending.dateStr}</span></div>` : ''}
+          </div>
+          ${nextPending && sale.payment_method === 'pix' ? `<a href="${wppUrl}" target="_blank" onclick="closeModal()" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;background:#25D366;border:none;border-radius:10px;color:white;font-size:14px;font-weight:500;cursor:pointer;text-decoration:none;margin-bottom:8px"><svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.49a.75.75 0 00.914.914l4.456-1.495A11.952 11.952 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.34 0-4.508-.758-6.26-2.04l-.438-.33-3.222 1.08 1.08-3.222-.33-.438A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg> Cobrar agora</a>` : ''}
+          <button class="btn-cancel" onclick="closeModal()">Fechar</button>
+        </div>
+      </div>`;
+    }
   }
 
   if (state.modal === 'addAgenda') {
