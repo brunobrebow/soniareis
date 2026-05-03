@@ -56,7 +56,8 @@ let state = {
   pdvStep: 'cart',
   pdvCart: [],
   pdvResult: null,
-  metaMensal: parseFloat(localStorage.getItem('srcrm_meta') || '20000')
+  metaMensal: parseFloat(localStorage.getItem('srcrm_meta') || '20000'),
+  agendaDate: new Date()
 };
 
 // ── CHARGE TRACKING ──
@@ -95,6 +96,54 @@ function openWppAndMarkAll(url, charges) {
   charges.forEach(c => markCobrada(c.sale.id, c.parcel.index, 2));
   window.open(url, '_blank');
   render();
+}
+
+// ── AGENDA STORAGE ──
+function getAgendaEvents() {
+  try { return JSON.parse(localStorage.getItem('srcrm_agenda') || '[]'); } catch { return []; }
+}
+function saveAgendaEvent(evt) {
+  const events = getAgendaEvents();
+  evt.id = Date.now().toString();
+  events.push(evt);
+  localStorage.setItem('srcrm_agenda', JSON.stringify(events));
+  return evt;
+}
+function deleteAgendaEvent(id) {
+  const events = getAgendaEvents().filter(e => e.id !== id);
+  localStorage.setItem('srcrm_agenda', JSON.stringify(events));
+}
+function getAgendaDayEvents(date) {
+  const d = date.getDate(), m = date.getMonth(), y = date.getFullYear();
+  const events = [];
+
+  // Manual appointments
+  getAgendaEvents().forEach(e => {
+    const ed = new Date(e.date);
+    if (ed.getDate() === d && ed.getMonth() === m && ed.getFullYear() === y) {
+      events.push({ type: 'compromisso', title: e.title, time: e.time || '', location: e.location || '', id: e.id, color: '#5B6ABF' });
+    }
+  });
+
+  // Charges due
+  getDueCharges('mes').forEach(c => {
+    if (!c.contact) return;
+    const pd = c.parcel.date;
+    if (pd.getDate() === d && pd.getMonth() === m && pd.getFullYear() === y && !c.parcel.paid) {
+      events.push({ type: 'cobranca', title: `Cobrar ${c.contact.name.split(' ').slice(0,2).join(' ')}`, sub: `R$ ${c.parcel.remaining} · ${c.sale.description}`, color: '#D4537E' });
+    }
+  });
+
+  // Birthdays
+  state.contacts.forEach(c => {
+    if (!c.birthday) return;
+    const [by, bm, bd] = c.birthday.split('-').map(Number);
+    if (bm === m + 1 && bd === d) {
+      events.push({ type: 'aniversario', title: `🎂 ${c.name}`, sub: `${y - by} anos`, color: '#E8A317' });
+    }
+  });
+
+  return events;
 }
 
 function getGroupChargeUrl(contact, charges) {
@@ -1597,6 +1646,7 @@ function render() {
   if (state.tab === 'home') html = renderHome();
   else if (state.tab === 'contatos') html = renderContatos();
   else if (state.tab === 'cobrancas') html = renderCobrancas();
+  else if (state.tab === 'agenda') html = renderAgenda();
   else html = renderFinanceiro();
 
   if (state.detail) html += renderDetail(state.detail);
@@ -1612,6 +1662,7 @@ function renderNav() {
     { id: 'home', svg: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>' },
     { id: 'contatos', svg: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>' },
     { id: 'cobrancas', svg: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>' },
+    { id: 'agenda', svg: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' },
     { id: 'financeiro', svg: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>' }
   ];
 
@@ -1816,6 +1867,22 @@ function renderHome() {
             </div>`;
           }
         })()}
+        ${(() => {
+          const todayEvents = getAgendaDayEvents(new Date());
+          const compromissos = todayEvents.filter(e => e.type === 'compromisso');
+          if (compromissos.length > 0) {
+            return `<div class="home-mini-card home-mini-agenda" onclick="switchTab('agenda')">
+              <div class="home-mini-num" style="color:#5B6ABF">📅 ${compromissos.length}</div>
+              <div class="home-mini-label">${compromissos[0].title.slice(0, 12)}${compromissos[0].title.length > 12 ? '…' : ''}</div>
+              <div class="home-mini-sub">${compromissos[0].time || 'hoje'}</div>
+            </div>`;
+          } else {
+            return `<div class="home-mini-card home-mini-muted" onclick="switchTab('agenda')">
+              <div class="home-mini-num" style="color:#ddd">📅</div>
+              <div class="home-mini-label" style="color:#ccc">agenda</div>
+            </div>`;
+          }
+        })()}
       </div>
 
     </div>`;
@@ -1965,6 +2032,108 @@ function renderCobrancas() {
         '</div>';
       }).join('')}
     </div>`;
+}
+
+function renderAgenda() {
+  const today = new Date();
+  const sel = state.agendaDate || today;
+  const selY = sel.getFullYear(), selM = sel.getMonth();
+  const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const diasSem = ['D','S','T','Q','Q','S','S'];
+
+  const firstDay = new Date(selY, selM, 1).getDay();
+  const daysInMonth = new Date(selY, selM + 1, 0).getDate();
+
+  // Build calendar grid
+  const cells = [];
+  for (let i = 0; i < firstDay; i++) cells.push('');
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  const isToday = (d) => d === today.getDate() && selM === today.getMonth() && selY === today.getFullYear();
+  const isSelected = (d) => d === sel.getDate() && selM === sel.getMonth() && selY === sel.getFullYear();
+
+  // Check which days have events
+  const daysWithEvents = {};
+  for (let d = 1; d <= daysInMonth; d++) {
+    const evts = getAgendaDayEvents(new Date(selY, selM, d));
+    if (evts.length > 0) daysWithEvents[d] = evts.length;
+  }
+
+  // Events for selected day
+  const dayEvents = getAgendaDayEvents(sel);
+
+  return `
+    <div class="screen-fixed-header">
+      <div class="topbar">
+        <div class="topbar-row">
+          <div><h2>Agenda</h2></div>
+          <button class="add-btn" onclick="state.modal='addAgenda';render()">+</button>
+        </div>
+      </div>
+      <div class="agenda-month-nav">
+        <button class="agenda-nav-btn" onclick="agendaNav(-1)">‹</button>
+        <span class="agenda-month-label">${meses[selM]} ${selY}</span>
+        <button class="agenda-nav-btn" onclick="agendaNav(1)">›</button>
+      </div>
+      <div class="agenda-cal">
+        <div class="agenda-week-header">
+          ${diasSem.map(d => `<div class="agenda-week-day">${d}</div>`).join('')}
+        </div>
+        <div class="agenda-grid">
+          ${cells.map(d => {
+            if (!d) return '<div class="agenda-cell"></div>';
+            const hasEvt = daysWithEvents[d];
+            return `<div class="agenda-cell ${isToday(d) ? 'agenda-today' : ''} ${isSelected(d) ? 'agenda-selected' : ''}" onclick="agendaSelectDay(${d})">
+              <span>${d}</span>
+              ${hasEvt ? '<div class="agenda-dot"></div>' : ''}
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+    <div class="screen-scroll-list">
+      <div class="section-label" style="padding-top:12px">${sel.getDate()} de ${meses[selM].toLowerCase()}</div>
+      <div style="padding:0 16px">
+        ${dayEvents.length === 0 ? '<div style="text-align:center;color:#aaa;font-size:14px;padding:20px 0">Nenhum evento neste dia</div>' : ''}
+        ${dayEvents.map(e => `
+          <div class="agenda-event" style="border-left:3px solid ${e.color}">
+            <div class="agenda-event-header">
+              <div>
+                <div class="agenda-event-title">${e.title}</div>
+                ${e.sub ? `<div class="agenda-event-sub">${e.sub}</div>` : ''}
+                ${e.time ? `<div class="agenda-event-sub">⏰ ${e.time}</div>` : ''}
+                ${e.location ? `<div class="agenda-event-sub">📍 ${e.location}</div>` : ''}
+              </div>
+              ${e.type === 'compromisso' && e.id ? `<button class="agenda-event-del" onclick="deleteAgendaEvent('${e.id}');render()">✕</button>` : ''}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+}
+
+function agendaNav(dir) {
+  const d = state.agendaDate || new Date();
+  state.agendaDate = new Date(d.getFullYear(), d.getMonth() + dir, 1);
+  render();
+}
+
+function agendaSelectDay(day) {
+  const d = state.agendaDate || new Date();
+  state.agendaDate = new Date(d.getFullYear(), d.getMonth(), day);
+  render();
+}
+
+function addAgendaEvent() {
+  const title = document.getElementById('agenda-title')?.value?.trim();
+  const date = document.getElementById('agenda-date')?.value;
+  const time = document.getElementById('agenda-time')?.value || '';
+  const location = document.getElementById('agenda-location')?.value?.trim() || '';
+  if (!title || !date) { showToast('Título e data são obrigatórios', '#A32D2D'); return; }
+  saveAgendaEvent({ title, date, time, location });
+  state.agendaDate = new Date(date + 'T12:00:00');
+  closeModal();
+  showToast('Compromisso adicionado!');
 }
 
 function renderFinanceiro() {
@@ -2389,6 +2558,22 @@ function renderModal() {
           ${salesCount > 0 ? `<br><br>⚠️ Isso também vai excluir ${salesCount} venda(s) e todas as parcelas. Não pode ser desfeito.` : '<br><br>Esta ação não pode ser desfeita.'}
         </div>
         <button class="btn-danger" onclick="confirmDeleteContact()">Excluir permanentemente</button>
+        <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+      </div>
+    </div>`;
+  }
+
+  if (state.modal === 'addAgenda') {
+    const today = new Date();
+    const defaultDate = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    return `<div class="modal-overlay" onclick="closeModal()">
+      <div class="modal-sheet" onclick="event.stopPropagation()">
+        <div class="modal-title">Novo compromisso</div>
+        <div class="form-group"><label class="form-label">Título</label><input class="form-input" id="agenda-title" placeholder="Ex: Visitar cliente" autofocus /></div>
+        <div class="form-group"><label class="form-label">Data</label><input class="form-input" id="agenda-date" type="date" value="${defaultDate}" /></div>
+        <div class="form-group"><label class="form-label">Horário (opcional)</label><input class="form-input" id="agenda-time" type="time" /></div>
+        <div class="form-group"><label class="form-label">Local (opcional)</label><input class="form-input" id="agenda-location" placeholder="Ex: UBS Central" /></div>
+        <button class="btn-primary" onclick="addAgendaEvent()">Adicionar</button>
         <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
       </div>
     </div>`;
