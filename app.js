@@ -200,6 +200,70 @@ function confirmDeleteAgenda() {
   }
 }
 
+function openFullPayment(contactId) {
+  const contact = getContact(contactId);
+  if (!contact) return;
+  const cSales = state.sales.filter(s => s.contact_id === contactId);
+  let totalPending = 0;
+  const pendingParcels = [];
+  // Get ALL pending parcels sorted by date (FIFO)
+  cSales.forEach(s => {
+    getSaleParcels(s).forEach(p => {
+      if (!p.paid) {
+        const rem = Math.round(p.remaining || p.amount);
+        totalPending += rem;
+        pendingParcels.push({ saleId: s.id, parcelIndex: p.index, remaining: rem, date: p.date });
+      }
+    });
+  });
+  pendingParcels.sort((a, b) => a.date - b.date);
+  if (totalPending <= 0) { showToast('Nenhuma parcela pendente!', '#3B6D11'); return; }
+  state._fullPayment = { contactId, contactName: contact.name, totalPending, pendingParcels };
+  state.modal = 'fullPayment';
+  render();
+}
+
+async function confirmFullPayment() {
+  const val = parseFloat(document.getElementById('full-pay-amount')?.value) || 0;
+  if (val <= 0) { showToast('Insira um valor válido', '#A32D2D'); return; }
+  const fp = state._fullPayment;
+  if (!fp) return;
+
+  const amount = Math.min(Math.round(val), fp.totalPending);
+  const payTimestamp = new Date().toISOString();
+  let leftover = amount;
+
+  try {
+    // FIFO: pay oldest parcels first
+    for (const p of fp.pendingParcels) {
+      if (leftover <= 0) break;
+      const payment = state.payments.find(pm => pm.sale_id === p.saleId && pm.parcel_index === p.parcelIndex);
+      const sale = state.sales.find(s => s.id === p.saleId);
+      if (!payment || !sale) continue;
+
+      const parcelRemaining = Math.round(sale.parcel_value - (payment.paid_amount || 0));
+      const payAmount = Math.min(leftover, parcelRemaining);
+      if (payAmount <= 0) continue;
+      leftover -= payAmount;
+
+      const totalPaid = Math.round((payment.paid_amount || 0) + payAmount);
+      const isFullParcel = totalPaid >= sale.parcel_value;
+
+      await DB.markPaid(p.saleId, p.parcelIndex, totalPaid, isFullParcel);
+      payment.paid_amount = totalPaid;
+      if (isFullParcel) payment.paid = true;
+      payment.paid_at = payTimestamp;
+    }
+
+    state.modal = null;
+    showToast(`R$ ${amount.toLocaleString('pt-BR')} registrado!`);
+    render();
+  } catch (e) {
+    showToast('Erro ao registrar.', '#A32D2D');
+    console.error(e);
+  }
+}
+
 function getGroupChargeUrl(contact, charges) {
   const total = charges.reduce((a, c) => a + (c.parcel.remaining || c.parcel.amount), 0);
   let msg = `Oiiii😍\nTudo bem?\nEstou enviando o valor do seu pix de hoje!\n\nValor a pagar hoje: R$ ${total}\nVencimento todo dia: ${charges[0]?.sale.start_day || ''}\n\nNome do Pix: ${CONFIG.pixNome}\nChave PIX celular: ${CONFIG.pixChave}\n\nObrigada! 💖`;
@@ -2491,6 +2555,7 @@ function renderDetail(contactId) {
           <button onclick="sendContactSummary('${c.id}')" style="flex:1;padding:11px;background:none;border:1px solid #25D366;border-radius:10px;color:#25D366;font-size:13px;font-weight:500;cursor:pointer">Histórico</button>
         </div>
         <button onclick="openModal('editContact','${c.id}')" style="width:100%;padding:10px;background:none;border:1px solid #e0e0e0;border-radius:10px;color:#666;font-size:14px;cursor:pointer;margin-top:8px">✏️ Editar dados</button>
+        <button onclick="openFullPayment('${c.id}')" style="width:100%;padding:12px;background:#D4537E;border:none;border-radius:10px;color:white;font-size:15px;font-weight:600;cursor:pointer;margin-top:8px">Registrar pagamento</button>
       </div>
       <div class="detail-section">
         <h3>Resumo da cliente</h3>
@@ -2887,6 +2952,23 @@ function renderModal() {
           <input class="form-input" id="tx-paid-amount" type="number" inputmode="decimal" placeholder="Valor pago" />
         </div>
         <button class="btn-primary" style="background:#666" onclick="confirmTransactionPartial()">Registrar valor parcial</button>
+        <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+      </div>
+    </div>`;
+  }
+
+  if (state.modal === 'fullPayment' && state._fullPayment) {
+    const fp = state._fullPayment;
+    return `<div class="modal-overlay" onclick="closeModal()">
+      <div class="modal-sheet" onclick="event.stopPropagation()">
+        <div class="modal-title">Registrar pagamento</div>
+        <div class="modal-subtitle">${fp.contactName} · Total pendente: R$ ${fp.totalPending.toLocaleString('pt-BR')}</div>
+        <div style="font-size:12px;color:#aaa;margin-bottom:12px">${fp.pendingParcels.length} parcela${fp.pendingParcels.length !== 1 ? 's' : ''} pendente${fp.pendingParcels.length !== 1 ? 's' : ''} · O valor será distribuído nas parcelas mais antigas primeiro.</div>
+        <div class="form-group">
+          <label class="form-label">Valor pago (R$)</label>
+          <input class="form-input" id="full-pay-amount" type="number" inputmode="decimal" placeholder="Ex: 500" autofocus />
+        </div>
+        <button class="btn-primary" onclick="confirmFullPayment()">Registrar pagamento</button>
         <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
       </div>
     </div>`;
