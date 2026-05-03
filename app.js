@@ -117,9 +117,10 @@ function getAgendaDayEvents(date) {
   const d = date.getDate(), m = date.getMonth(), y = date.getFullYear();
   const events = [];
 
-  // Charges due
+  // Charges due (only Pix)
   getDueCharges('mes').forEach(c => {
     if (!c.contact) return;
+    if (c.sale.payment_method === 'cartao') return;
     const pd = c.parcel.date;
     if (pd.getDate() === d && pd.getMonth() === m && pd.getFullYear() === y && !c.parcel.paid) {
       const cobrada = isCobrada(c.sale.id, c.parcel.index) || c.parcel.paid;
@@ -175,6 +176,20 @@ function toggleAgendaDone(eventId) {
     evt.done = !evt.done;
     localStorage.setItem('srcrm_agenda', JSON.stringify(events));
     render();
+  }
+}
+
+function openAgendaDetail(eventId) {
+  state._agendaDetailId = eventId;
+  state.modal = 'agendaDetail';
+  render();
+}
+
+function confirmDeleteAgenda() {
+  if (state._agendaDetailId) {
+    deleteAgendaEvent(state._agendaDetailId);
+    closeModal();
+    showToast('Compromisso excluído');
   }
 }
 
@@ -2128,7 +2143,7 @@ function renderAgenda() {
       <div style="padding:0 16px">
         ${dayEvents.length === 0 ? '<div style="text-align:center;color:#aaa;font-size:14px;padding:20px 0">Nenhum evento neste dia</div>' : ''}
         ${dayEvents.map(e => `
-          <div class="agenda-event ${e.done ? 'agenda-event-done' : ''}" style="border-left:3px solid ${e.color}${e.type === 'cobranca' && !e.done ? ';cursor:pointer' : ''}" ${e.type === 'cobranca' && e.sale && !e.done ? `onclick="openAgendaCharge('${e.sale.id}','${e.contact?.id}')"` : ''}>
+          <div class="agenda-event ${e.done ? 'agenda-event-done' : ''}" style="border-left:3px solid ${e.color};cursor:pointer" ${e.type === 'cobranca' && e.sale && !e.done ? `onclick="openAgendaCharge('${e.sale.id}','${e.contact?.id}')"` : ''} ${e.type === 'compromisso' && e.id ? `onclick="openAgendaDetail('${e.id}')"` : ''}>
             <div class="agenda-event-header">
               <div style="flex:1">
                 <div class="agenda-event-title">${e.done ? '✅ ' : ''}${e.title}</div>
@@ -2137,10 +2152,7 @@ function renderAgenda() {
                 ${e.location ? `<div class="agenda-event-sub">📍 ${e.location}</div>` : ''}
               </div>
               ${e.type === 'compromisso' && e.id ? `
-                <div style="display:flex;gap:8px;align-items:center">
-                  <button class="agenda-check-btn ${e.done ? 'agenda-check-done' : ''}" onclick="event.stopPropagation();toggleAgendaDone('${e.id}')">${e.done ? '✓' : '○'}</button>
-                  <button class="agenda-event-del" onclick="event.stopPropagation();deleteAgendaEvent('${e.id}');render()">✕</button>
-                </div>
+                <button class="agenda-check-btn ${e.done ? 'agenda-check-done' : ''}" onclick="event.stopPropagation();toggleAgendaDone('${e.id}')">${e.done ? '✓' : '○'}</button>
               ` : ''}
               ${e.type === 'aniversario' && !e.done ? `
                 <button class="agenda-bday-btn" onclick="event.stopPropagation();sendBdayAndMark('${e.contactId}','${e.phone}')">Felicitar 💖</button>
@@ -2181,6 +2193,12 @@ function openAgendaCharge(saleId, contactId) {
   state._agendaChargeData = { saleId, contactId };
   state.modal = 'agendaCharge';
   render();
+}
+
+function agendaCobrarAgora(saleId, parcelIndex, wppUrl) {
+  markCobrada(saleId, parcelIndex, 2);
+  window.open(wppUrl, '_blank');
+  closeModal();
 }
 
 function renderFinanceiro() {
@@ -2610,6 +2628,39 @@ function renderModal() {
     </div>`;
   }
 
+  if (state.modal === 'agendaDetail' && state._agendaDetailId) {
+    const evt = getAgendaEvents().find(e => e.id === state._agendaDetailId);
+    if (evt) {
+      const [ey, em, ed] = evt.date.split('-').map(Number);
+      const meses = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+      return `<div class="modal-overlay" onclick="closeModal()">
+        <div class="modal-sheet" onclick="event.stopPropagation()">
+          <div class="modal-title">${evt.title}</div>
+          <div style="margin:12px 0;font-size:14px;color:#666">
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f0f0f0"><span>📅 Data</span><span style="color:#1a1a1a">${ed} de ${meses[em-1]} de ${ey}</span></div>
+            ${evt.time ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f0f0f0"><span>⏰ Horário</span><span style="color:#1a1a1a">${evt.time}</span></div>` : ''}
+            ${evt.location ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f0f0f0"><span>📍 Local</span><span style="color:#1a1a1a">${evt.location}</span></div>` : ''}
+            <div style="display:flex;justify-content:space-between;padding:8px 0"><span>Status</span><span style="color:${evt.done ? '#3B6D11' : '#D4537E'};font-weight:500">${evt.done ? '✅ Concluído' : '⏳ Pendente'}</span></div>
+          </div>
+          <button class="btn-primary" onclick="toggleAgendaDone('${evt.id}');closeModal()" style="margin-bottom:8px">${evt.done ? 'Marcar como pendente' : 'Marcar como concluído'}</button>
+          <button onclick="state.modal='agendaDeleteConfirm';render()" style="width:100%;padding:12px;background:none;border:1px solid #A32D2D;border-radius:10px;color:#A32D2D;font-size:14px;cursor:pointer;margin-bottom:8px">Excluir compromisso</button>
+          <button class="btn-cancel" onclick="closeModal()">Fechar</button>
+        </div>
+      </div>`;
+    }
+  }
+
+  if (state.modal === 'agendaDeleteConfirm') {
+    return `<div class="modal-overlay" onclick="state.modal='agendaDetail';render()">
+      <div class="modal-sheet" onclick="event.stopPropagation()">
+        <div class="modal-title">Excluir compromisso?</div>
+        <div class="modal-subtitle">Esta ação não pode ser desfeita.</div>
+        <button onclick="confirmDeleteAgenda()" style="width:100%;padding:12px;background:#A32D2D;border:none;border-radius:10px;color:white;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px">Confirmar exclusão</button>
+        <button class="btn-cancel" onclick="state.modal='agendaDetail';render()">Cancelar</button>
+      </div>
+    </div>`;
+  }
+
   if (state.modal === 'agendaCharge' && state._agendaChargeData) {
     const { saleId, contactId } = state._agendaChargeData;
     const sale = state.sales.find(s => s.id === saleId);
@@ -2640,7 +2691,7 @@ function renderModal() {
             <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0"><span>Vencimento</span><span style="color:#1a1a1a">Todo dia ${sale.start_day}</span></div>
             ${nextPending ? `<div style="display:flex;justify-content:space-between;padding:6px 0"><span>Próxima parcela</span><span style="color:#D4537E;font-weight:600">R$ ${nextPending.remaining} · ${nextPending.dateStr}</span></div>` : ''}
           </div>
-          ${nextPending && sale.payment_method === 'pix' ? `<a href="${wppUrl}" target="_blank" onclick="closeModal()" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;background:#25D366;border:none;border-radius:10px;color:white;font-size:14px;font-weight:500;cursor:pointer;text-decoration:none;margin-bottom:8px"><svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.49a.75.75 0 00.914.914l4.456-1.495A11.952 11.952 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.34 0-4.508-.758-6.26-2.04l-.438-.33-3.222 1.08 1.08-3.222-.33-.438A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg> Cobrar agora</a>` : ''}
+          ${nextPending && sale.payment_method === 'pix' ? `<button onclick="agendaCobrarAgora('${sale.id}',${nextPending.index},'${wppUrl}')" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;background:#25D366;border:none;border-radius:10px;color:white;font-size:14px;font-weight:500;cursor:pointer;margin-bottom:8px"><svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.49a.75.75 0 00.914.914l4.456-1.495A11.952 11.952 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.34 0-4.508-.758-6.26-2.04l-.438-.33-3.222 1.08 1.08-3.222-.33-.438A9.96 9.96 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg> Cobrar agora</button>` : ''}
           <button class="btn-cancel" onclick="closeModal()">Fechar</button>
         </div>
       </div>`;
