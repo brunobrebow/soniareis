@@ -407,7 +407,7 @@ async function addSale() {
       description: desc,
       total,
       parcels,
-      parcel_value: Math.round(total / parcels),
+      parcel_value: Math.floor(total / parcels),
       start_day: day,
       payment_method: 'pix'
     });
@@ -761,7 +761,7 @@ async function pdvSubmit() {
         description: descWithQty,
         total: itemFinal,
         parcels,
-        parcel_value: Math.round(itemFinal / parcels),
+        parcel_value: Math.floor(itemFinal / parcels),
         start_day: day,
         payment_method: method,
         category: item.category
@@ -769,7 +769,7 @@ async function pdvSubmit() {
       state.sales.push(newSale);
       const newPayments = await DB.initPayments(newSale.id, parcels);
       state.payments.push(...newPayments);
-      items.push({ ...item, total: itemFinal, originalTotal: itemGross, itemDiscount: itemPerDiscount, parcel_value: Math.round(itemFinal / parcels) });
+      items.push({ ...item, total: itemFinal, originalTotal: itemGross, itemDiscount: itemPerDiscount, parcel_value: Math.floor(itemFinal / parcels) });
     }
 
     state.pdvResult = { items, contact, parcels, day, method, total, discount: totalDiscount, isAberto };
@@ -784,7 +784,7 @@ async function pdvSubmit() {
 function pdvShareWhatsApp() {
   const r = state.pdvResult;
   if (!r) return;
-  const parcelVal = Math.round(r.total / r.parcels);
+  const parcelVal = Math.round(r.total / r.parcels * 100) / 100;
   const rawSub = r.items.reduce((a, i) => a + i.value * (i.qty || 1), 0);
   const itemDiscTotal = r.items.reduce((a, i) => a + (i.itemDiscount || 0), 0);
   const hasDiscount = itemDiscTotal > 0 || r.discount > 0;
@@ -1061,7 +1061,7 @@ function renderPDV() {
     const hasAnyDiscount = itemDiscTotal > 0 || rv.totalDiscount > 0;
     const isAberto = rv.parcelsRaw === 'aberto';
     const parcels = isAberto ? 1 : parseInt(rv.parcelsRaw);
-    const pv = Math.round(finalTotal / parcels);
+    const pv = Math.round(finalTotal / parcels * 100) / 100;
 
     return `<div class="pdv-overlay">
       ${topbar("state.pdvStep='payment';render()", 'Resumo da venda')}
@@ -1122,7 +1122,7 @@ function renderPDV() {
   // ── STEP: SUCCESS ──
   if (state.pdvStep === 'success' && state.pdvResult) {
     const r = state.pdvResult;
-    const pv = Math.round(r.total / r.parcels);
+    const pv = Math.round(r.total / r.parcels * 100) / 100;
     return `<div class="pdv-overlay">
       ${topbar('exitPDV()', 'Venda registrada')}
       <div class="pdv-success-scroll">
@@ -1308,7 +1308,7 @@ function sendTransactionSummary(contactId, saleIdsStr) {
   const method = txSales[0].payment_method || 'pix';
   const parcelsNum = txSales[0].parcels;
   const day = txSales[0].start_day;
-  const parcelVal = Math.round(total / parcelsNum);
+  const parcelVal = Math.round(total / parcelsNum * 100) / 100;
 
   let msg = `*Resumo da compra*\n\n`;
   txSales.forEach(s => {
@@ -2487,7 +2487,7 @@ function renderDetail(contactId) {
                 <div class="transaction-header">
                   <div>
                     <div style="font-size:13px;color:#888">${g.date} · ${g.sales.length} ${g.sales.length === 1 ? 'item' : 'itens'} · ${method === 'pix' ? 'Pix' : 'Cartão'}</div>
-                    <div style="font-size:16px;font-weight:600;color:#1a1a1a;margin-top:2px">R$ ${gTotal.toLocaleString('pt-BR')} · ${numParcels}x R$ ${Math.round(gTotal / numParcels)} · Dia ${day}</div>
+                    <div style="font-size:16px;font-weight:600;color:#1a1a1a;margin-top:2px">R$ ${gTotal.toLocaleString('pt-BR')} · ${numParcels}x R$ ${Math.round(gTotal / numParcels * 100) / 100} · Dia ${day}</div>
                   </div>
                   <button onclick="sendTransactionSummary('${c.id}','${g.ids.join(',')}')" style="background:#25D366;border:none;border-radius:8px;color:white;font-size:11px;padding:6px 10px;cursor:pointer;white-space:nowrap">📩 Enviar</button>
                 </div>
@@ -2596,7 +2596,7 @@ function renderModal() {
           </div>
           <div style="margin:12px 0;font-size:14px;color:#666">
             <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0"><span>Total da venda</span><span style="color:#1a1a1a;font-weight:600">R$ ${txTotal}</span></div>
-            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0"><span>Parcelas</span><span style="color:#1a1a1a">${sale.parcels}x de R$ ${Math.round(txTotal / sale.parcels)}</span></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0"><span>Parcelas</span><span style="color:#1a1a1a">${sale.parcels}x de R$ ${Math.round(txTotal / sale.parcels * 100) / 100}</span></div>
             <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0"><span>Vencimento</span><span style="color:#1a1a1a">Todo dia ${sale.start_day}</span></div>
             ${nextPending ? `<div style="display:flex;justify-content:space-between;padding:6px 0"><span>Próxima parcela</span><span style="color:#D4537E;font-weight:600">R$ ${nextPending.remaining} · ${nextPending.dateStr}</span></div>` : ''}
           </div>
