@@ -1677,22 +1677,46 @@ function renderHome() {
         </button>
       </div>
 
-      ${(() => {
-        const dueToday = getDueCharges('mes').filter(c => (c.isPast || c.isToday) && !isCobrada(c.sale.id, c.parcel.index));
-        const count = dueToday.length;
-        if (count > 0) {
-          return `<div class="home-charges-alert" onclick="state.chargeFilter='pendente';switchTab('cobrancas')">
-            <div class="home-charges-num">${count}</div>
-            <div class="home-charges-label">cobrança${count !== 1 ? 's' : ''} pendente${count !== 1 ? 's' : ''}</div>
-            <button class="home-charges-btn">Ver cobranças</button>
-          </div>`;
-        } else {
-          return `<div class="home-charges-empty">
-            <div class="home-charges-num-empty">0</div>
-            <div class="home-charges-label-empty">cobranças pendentes</div>
-          </div>`;
-        }
-      })()}
+      <div class="home-cards-row">
+        ${(() => {
+          const dueToday = getDueCharges('mes').filter(c => (c.isPast || c.isToday) && !isCobrada(c.sale.id, c.parcel.index));
+          const count = dueToday.length;
+          if (count > 0) {
+            return `<div class="home-mini-card home-mini-alert" onclick="state.chargeFilter='pendente';switchTab('cobrancas')">
+              <div class="home-mini-num" style="color:#D4537E">${count}</div>
+              <div class="home-mini-label">cobrança${count !== 1 ? 's' : ''}</div>
+              <div class="home-mini-sub">pendente${count !== 1 ? 's' : ''}</div>
+            </div>`;
+          } else {
+            return `<div class="home-mini-card home-mini-muted">
+              <div class="home-mini-num" style="color:#ddd">0</div>
+              <div class="home-mini-label" style="color:#ccc">cobranças</div>
+            </div>`;
+          }
+        })()}
+        ${(() => {
+          const today = new Date();
+          const todayM = today.getMonth() + 1;
+          const todayD = today.getDate();
+          const bdays = state.contacts.filter(c => {
+            if (!c.birthday) return false;
+            const [y, m, d] = c.birthday.split('-').map(Number);
+            return m === todayM && d === todayD;
+          });
+          if (bdays.length > 0) {
+            return `<div class="home-mini-card home-mini-bday" onclick="state.modal='birthdays';render()">
+              <div class="home-mini-num" style="color:#E8A317">🎂 ${bdays.length}</div>
+              <div class="home-mini-label">aniversário${bdays.length !== 1 ? 's' : ''}</div>
+              <div class="home-mini-sub">hoje</div>
+            </div>`;
+          } else {
+            return `<div class="home-mini-card home-mini-muted" onclick="state.modal='birthdays';render()">
+              <div class="home-mini-num" style="color:#ddd">🎂</div>
+              <div class="home-mini-label" style="color:#ccc">aniversários</div>
+            </div>`;
+          }
+        })()}
+      </div>
 
     </div>`;
 }
@@ -2192,6 +2216,77 @@ function renderModal() {
         </div>
         <button class="btn-danger" onclick="confirmDeleteContact()">Excluir permanentemente</button>
         <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+      </div>
+    </div>`;
+  }
+
+  if (state.modal === 'birthdays') {
+    const today = new Date();
+    const todayM = today.getMonth() + 1;
+    const todayD = today.getDate();
+    const meses = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+    const bdays = state.contacts.filter(c => {
+      if (!c.birthday) return false;
+      const [y, m, d] = c.birthday.split('-').map(Number);
+      return m === todayM && d === todayD;
+    });
+
+    // Upcoming birthdays (next 30 days, excluding today)
+    const upcoming = state.contacts.filter(c => {
+      if (!c.birthday) return false;
+      const [y, m, d] = c.birthday.split('-').map(Number);
+      if (m === todayM && d === todayD) return false;
+      const thisYear = today.getFullYear();
+      let next = new Date(thisYear, m - 1, d);
+      if (next < today) next = new Date(thisYear + 1, m - 1, d);
+      const diff = (next - today) / (1000 * 60 * 60 * 24);
+      return diff <= 30 && diff > 0;
+    }).map(c => {
+      const [y, m, d] = c.birthday.split('-').map(Number);
+      const thisYear = today.getFullYear();
+      let next = new Date(thisYear, m - 1, d);
+      if (next < today) next = new Date(thisYear + 1, m - 1, d);
+      return { ...c, nextBday: next, daysUntil: Math.ceil((next - today) / (1000 * 60 * 60 * 24)) };
+    }).sort((a, b) => a.daysUntil - b.daysUntil);
+
+    return `<div class="modal-overlay" onclick="closeModal()">
+      <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:85vh">
+        <div class="modal-title">🎂 Aniversários</div>
+        ${bdays.length > 0 ? `
+          <div class="modal-subtitle">Hoje</div>
+          ${bdays.map(c => {
+            const [y] = c.birthday.split('-');
+            const age = today.getFullYear() - parseInt(y);
+            const bdayMsg = encodeURIComponent(`Feliz aniversário!! 🎂🎉\nMuitas felicidades, saúde e bençãos pra você! Que esse novo ano seja incrível! 💖`);
+            const ci = getColorIndex(c.id);
+            return `<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #f5f5f5">
+              <div class="avatar" style="width:40px;height:40px;font-size:13px;background:${COLORS[ci]};color:${TEXT_COLORS[ci]}">${getInitials(c.name)}</div>
+              <div style="flex:1">
+                <div style="font-size:15px;font-weight:500;color:#1a1a1a">${c.name}</div>
+                <div style="font-size:12px;color:#aaa">${age} anos</div>
+              </div>
+              <a href="https://wa.me/${c.phone}?text=${bdayMsg}" target="_blank" style="padding:6px 12px;background:#25D366;border:none;border-radius:8px;color:white;font-size:12px;text-decoration:none;font-weight:500">Felicitar 💖</a>
+            </div>`;
+          }).join('')}
+        ` : '<div style="text-align:center;color:#aaa;padding:12px 0;font-size:14px">Nenhum aniversário hoje</div>'}
+
+        ${upcoming.length > 0 ? `
+          <div class="modal-subtitle" style="margin-top:16px">Próximos 30 dias</div>
+          ${upcoming.map(c => {
+            const [y, m, d] = c.birthday.split('-').map(Number);
+            const age = today.getFullYear() - parseInt(y) + (c.nextBday.getFullYear() > today.getFullYear() ? 1 : 0);
+            const ci = getColorIndex(c.id);
+            return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f5f5f5">
+              <div class="avatar" style="width:36px;height:36px;font-size:12px;background:${COLORS[ci]};color:${TEXT_COLORS[ci]}">${getInitials(c.name)}</div>
+              <div style="flex:1">
+                <div style="font-size:14px;font-weight:500;color:#1a1a1a">${c.name}</div>
+                <div style="font-size:12px;color:#aaa">${d}/${meses[m-1]} · ${age} anos</div>
+              </div>
+              <div style="font-size:12px;color:#D4537E;font-weight:500">${c.daysUntil === 1 ? 'Amanhã' : 'em ' + c.daysUntil + ' dias'}</div>
+            </div>`;
+          }).join('')}
+        ` : ''}
+        <button class="btn-cancel" onclick="closeModal()">Fechar</button>
       </div>
     </div>`;
   }

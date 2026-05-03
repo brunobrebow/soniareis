@@ -356,15 +356,16 @@ body {
 /* Home meta button */
 .home-meta-link { cursor: pointer; color: #bbb; font-size: 11px; text-decoration: underline; }
 
-/* ─── HOME CHARGES ALERT ─── */
-.home-charges-alert { margin: 0 16px 20px; background: #FBEAF0; border: 2px solid #D4537E; border-radius: 16px; padding: 12px 16px; text-align: center; cursor: pointer; }
-.home-charges-alert:active { background: #f5d5e2; }
-.home-charges-num { font-size: 36px; font-weight: 700; color: #D4537E; line-height: 1; }
-.home-charges-label { font-size: 13px; color: #993556; margin-top: 2px; }
-.home-charges-btn { margin-top: 8px; padding: 8px 20px; background: #D4537E; border: none; border-radius: 10px; color: white; font-size: 13px; font-weight: 600; cursor: pointer; }
-.home-charges-empty { margin: 0 16px 20px; background: #f9f9f9; border: 1px solid #e8e8e8; border-radius: 16px; padding: 20px; text-align: center; }
-.home-charges-num-empty { font-size: 36px; font-weight: 700; color: #ddd; }
-.home-charges-label-empty { font-size: 13px; color: #ccc; margin-top: 4px; }
+/* ─── HOME MINI CARDS ROW ─── */
+.home-cards-row { display: flex; gap: 12px; padding: 0 16px 20px; }
+.home-mini-card { flex: 1; background: #f9f9f9; border-radius: 14px; padding: 14px 10px; text-align: center; cursor: pointer; border: 1px solid #e8e8e8; }
+.home-mini-card:active { background: #f0f0f0; }
+.home-mini-alert { background: #FBEAF0; border-color: #D4537E; }
+.home-mini-bday { background: #FFF8E7; border-color: #E8A317; }
+.home-mini-muted { cursor: pointer; }
+.home-mini-num { font-size: 28px; font-weight: 700; line-height: 1; }
+.home-mini-label { font-size: 13px; color: #666; margin-top: 4px; }
+.home-mini-sub { font-size: 11px; color: #aaa; margin-top: 2px; }
 
 /* ─── MISC ─── */
 
