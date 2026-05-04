@@ -1857,11 +1857,11 @@ function renderHome() {
 
   // Monthly pending (unpaid parcels due this month)
   const mesCharges = getDueCharges('mes');
-  const pendentesMes = mesCharges.filter(c => !c.isPast).reduce((a, c) => a + c.parcel.amount, 0);
+  const pendentesMes = mesCharges.filter(c => !c.isPast).reduce((a, c) => a + c.parcel.remaining, 0);
 
   const lateCharges = getDueCharges('atrasado');
   const todayCharges = getDueCharges('hoje');
-  const atrasadoTotal = lateCharges.reduce((a, c) => a + c.parcel.amount, 0);
+  const atrasadoTotal = lateCharges.reduce((a, c) => a + c.parcel.remaining, 0);
   const clientesAtivas = state.contacts.filter(c => {
     return state.sales.some(s => s.contact_id === c.id && getSaleParcels(s).some(p => !p.paid));
   }).length;
@@ -2492,7 +2492,7 @@ function renderDetail(contactId) {
   const ci = getColorIndex(c.id);
   const cSales = state.sales.filter(s => s.contact_id === contactId);
   const totalPending = cSales.reduce((a, s) => {
-    return a + getSaleParcels(s).filter(p => !p.paid).reduce((x, p) => x + p.amount, 0);
+    return a + getSaleParcels(s).filter(p => !p.paid).reduce((x, p) => x + p.remaining, 0);
   }, 0);
 
   // ── Client stats ──
@@ -2573,8 +2573,8 @@ function renderDetail(contactId) {
       <div class="detail-section">
         <h3>Resumo da cliente</h3>
         <div class="client-stats">
-          <div class="client-stat"><div class="client-stat-value">R$ ${totalSpent.toLocaleString('pt-BR')}</div><div class="client-stat-label">total comprado</div></div>
-          <div class="client-stat"><div class="client-stat-value">R$ ${totalPaid.toLocaleString('pt-BR')}</div><div class="client-stat-label">total pago</div></div>
+          <div class="client-stat"><div class="client-stat-value">R$ ${Math.round(totalSpent).toLocaleString('pt-BR')}</div><div class="client-stat-label">total comprado</div></div>
+          <div class="client-stat"><div class="client-stat-value">R$ ${Math.round(totalPaid).toLocaleString('pt-BR')}</div><div class="client-stat-label">total pago</div></div>
           <div class="client-stat"><div class="client-stat-value">R$ ${mediaMensal.toLocaleString('pt-BR')}</div><div class="client-stat-label">média/mês</div></div>
           <div class="client-stat"><div class="client-stat-value">${pendingParcels}</div><div class="client-stat-label">parcelas pendentes</div></div>
           <div class="client-stat"><div class="client-stat-value">${(() => {
@@ -2658,7 +2658,6 @@ function renderDetail(contactId) {
                     <div class="parcel-row">
                       <span class="parcel-num">Parc. ${p.index + 1}</span>
                       <span class="parcel-date">${p.dateStr}</span>
-                      <span style="font-size:13px;color:#1a1a1a;font-weight:500">R$ ${p.amount}</span>
                       <div class="parcel-status">
                         <span class="badge ${p.paid ? 'badge-ok' : 'badge-due'}">${p.paid ? 'Pago' : 'R$ ' + p.remaining}</span>
                         ${!p.paid ? `<button style="background:none;border:none;cursor:pointer;font-size:12px;color:#D4537E;padding:0" onclick="openTransactionPaidModal('${g.ids.join(',')}',${p.index})">Registrar</button>` : `<button style="background:none;border:none;cursor:pointer;font-size:11px;color:#A32D2D;padding:0" onclick="undoTransactionParcel('${g.ids.join(',')}',${p.index})">Desfazer</button>`}
