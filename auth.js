@@ -2,7 +2,7 @@
 
 const AUTH = {
   USER: 'soniareis',
-  PASS: 'Sonia@09',
+  PASS: 'Nina1709',
   COOKIE_KEY: 'srcrm_session',
   COOKIE_DAYS: 30,
 

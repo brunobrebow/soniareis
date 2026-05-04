@@ -39,9 +39,31 @@
       });
     }
     window.addEventListener('load', () => {
-      document.getElementById('login-screen').style.display = 'none';
-      document.getElementById('app').style.display = 'flex';
-      init();
+      if (AUTH.isLoggedIn()) {
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('app').style.display = 'flex';
+        init();
+      } else {
+        document.getElementById('login-screen').innerHTML = `
+          <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#fff;padding:20px">
+            <div style="width:100%;max-width:340px;text-align:center">
+              <div style="width:72px;height:72px;border-radius:50%;background:#FBEAF0;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:32px">💎</div>
+              <h2 style="font-size:22px;color:#1a1a1a;margin-bottom:4px">Sonia Reis CRM</h2>
+              <p style="font-size:14px;color:#aaa;margin-bottom:24px">Faça login para continuar</p>
+              <div style="margin-bottom:12px;text-align:left">
+                <label style="font-size:13px;color:#888;display:block;margin-bottom:4px">Login</label>
+                <input id="l-user" class="form-input" placeholder="Usuário" autocomplete="username" style="width:100%;box-sizing:border-box" />
+              </div>
+              <div style="margin-bottom:16px;text-align:left">
+                <label style="font-size:13px;color:#888;display:block;margin-bottom:4px">Senha</label>
+                <input id="l-pass" class="form-input" type="password" placeholder="Senha" autocomplete="current-password" style="width:100%;box-sizing:border-box" onkeydown="if(event.key==='Enter')doLogin()" />
+              </div>
+              <div id="l-error" style="color:#A32D2D;font-size:13px;margin-bottom:12px"></div>
+              <button onclick="doLogin()" style="width:100%;padding:14px;background:#D4537E;border:none;border-radius:12px;color:white;font-size:16px;font-weight:600;cursor:pointer">Entrar</button>
+            </div>
+          </div>`;
+        document.getElementById('login-screen').style.display = 'block';
+      }
     });
   </script>
 
