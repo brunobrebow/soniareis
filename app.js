@@ -241,13 +241,14 @@ async function confirmFullPayment() {
       const sale = state.sales.find(s => s.id === p.saleId);
       if (!payment || !sale) continue;
 
-      const parcelRemaining = Math.round(sale.parcel_value - (payment.paid_amount || 0));
+      const pAmt = getParcelAmount(sale, p.parcelIndex);
+      const parcelRemaining = Math.round(pAmt - (payment.paid_amount || 0));
       const payAmount = Math.min(leftover, parcelRemaining);
       if (payAmount <= 0) continue;
       leftover -= payAmount;
 
       const totalPaid = Math.round((payment.paid_amount || 0) + payAmount);
-      const isFullParcel = totalPaid >= sale.parcel_value;
+      const isFullParcel = totalPaid >= pAmt;
 
       await DB.markPaid(p.saleId, p.parcelIndex, totalPaid, isFullParcel);
       payment.paid_amount = totalPaid;
@@ -379,6 +380,10 @@ function getColorIndex(id) {
   return hash % COLORS.length;
 }
 
+function getParcelAmount(sale, parcelIndex) {
+  return (parcelIndex === sale.parcels - 1) ? sale.total - sale.parcel_value * (sale.parcels - 1) : sale.parcel_value;
+}
+
 function getSaleParcels(sale) {
   const today = new Date();
   const m = today.getMonth();
@@ -394,13 +399,14 @@ function getSaleParcels(sale) {
     const d = new Date(y, m - paidCount + i, sale.start_day);
     const payment = paymentsByIndex[i];
     const paidAmount = payment?.paid_amount || 0;
-    const remaining = Math.round(sale.parcel_value - paidAmount);
+    const parcelAmount = (i === sale.parcels - 1) ? sale.total - sale.parcel_value * (sale.parcels - 1) : sale.parcel_value;
+    const remaining = Math.round(parcelAmount - paidAmount);
     return {
       index: i,
       date: d,
       dateStr: d.toLocaleDateString('pt-BR'),
       paid: payment?.paid || false,
-      amount: sale.parcel_value,
+      amount: parcelAmount,
       paidAmount,
       paidAt: payment?.paid_at || null,
       remaining
@@ -547,7 +553,8 @@ async function markPaid(saleId, parcelIndex) {
   const sale = state.sales.find(s => s.id === saleId);
   const payment = state.payments.find(p => p.sale_id === saleId && p.parcel_index === parcelIndex);
   if (!sale || !payment) return;
-  const remaining = Math.round(sale.parcel_value - (payment.paid_amount || 0));
+  const pAmt = getParcelAmount(sale, parcelIndex);
+  const remaining = Math.round(pAmt - (payment.paid_amount || 0));
   try {
     const totalPaid = Math.round((payment.paid_amount || 0) + remaining);
     await DB.markPaid(saleId, parcelIndex, totalPaid, true);
@@ -572,10 +579,11 @@ async function markPartialPaid(saleId, parcelIndex) {
   const sale = state.sales.find(s => s.id === saleId);
   const payment = state.payments.find(p => p.sale_id === saleId && p.parcel_index === parcelIndex);
   if (!sale || !payment) return;
-  const remaining = Math.round(sale.parcel_value - (payment.paid_amount || 0));
+  const pAmt = getParcelAmount(sale, parcelIndex);
+  const remaining = Math.round(pAmt - (payment.paid_amount || 0));
   const amount = Math.min(val, remaining);
   const totalPaid = Math.round((payment.paid_amount || 0) + amount);
-  const isFullPayment = totalPaid >= sale.parcel_value;
+  const isFullPayment = totalPaid >= pAmt;
   try {
     await DB.markPaid(saleId, parcelIndex, totalPaid, isFullPayment);
     payment.paid_amount = totalPaid;
@@ -587,7 +595,7 @@ async function markPartialPaid(saleId, parcelIndex) {
     showToast(`R$ ${amount.toLocaleString('pt-BR')} registrado!`);
 
     if (!isFullPayment) {
-      const newRemaining = Math.round(sale.parcel_value - totalPaid);
+      const newRemaining = Math.round(pAmt - totalPaid);
       state._reminderSaleId = saleId;
       state._reminderParcelIndex = parcelIndex;
       state._reminderRemaining = newRemaining;
@@ -1522,13 +1530,14 @@ async function confirmGroupPayment() {
       const sale = state.sales.find(s => s.id === p.saleId);
       if (!payment || !sale) continue;
 
-      const parcelRemaining = Math.round(sale.parcel_value - (payment.paid_amount || 0));
+      const pAmt2 = getParcelAmount(sale, p.parcelIndex);
+      const parcelRemaining = Math.round(pAmt2 - (payment.paid_amount || 0));
       const payAmount = Math.min(leftover, parcelRemaining);
       if (payAmount <= 0) continue;
       leftover -= payAmount;
 
       const totalPaid = Math.round((payment.paid_amount || 0) + payAmount);
-      const isFullPayment = totalPaid >= sale.parcel_value;
+      const isFullPayment = totalPaid >= pAmt;
 
       await DB.markPaid(p.saleId, p.parcelIndex, totalPaid, isFullPayment);
       payment.paid_amount = totalPaid;
@@ -1620,7 +1629,7 @@ async function openTransactionPaidModal(saleIdsStr, parcelIndex) {
     const sale = state.sales.find(s => s.id === saleId);
     const pm = state.payments.find(p => p.sale_id === saleId && p.parcel_index === parcelIndex);
     if (sale && pm && !pm.paid) {
-      const rem = Math.round(sale.parcel_value - (pm.paid_amount || 0));
+      const rem = Math.round(getParcelAmount(sale, ref.parcelIndex) - (pm.paid_amount || 0));
       totalAmount += rem;
       refs.push({ saleId, parcelIndex, remaining: rem });
     }
@@ -1638,7 +1647,8 @@ async function confirmTransactionPaid() {
       const sale = state.sales.find(s => s.id === ref.saleId);
       const pm = state.payments.find(p => p.sale_id === ref.saleId && p.parcel_index === ref.parcelIndex);
       if (!sale || !pm) continue;
-      const totalPaid = Math.round(sale.parcel_value);
+      const pAmt = getParcelAmount(sale, ref.parcelIndex);
+      const totalPaid = Math.round(pAmt);
       await DB.markPaid(ref.saleId, ref.parcelIndex, totalPaid, true);
       pm.paid = true;
       pm.paid_amount = totalPaid;
@@ -1666,11 +1676,11 @@ async function confirmTransactionPartial() {
       const sale = state.sales.find(s => s.id === ref.saleId);
       const pm = state.payments.find(p => p.sale_id === ref.saleId && p.parcel_index === ref.parcelIndex);
       if (!sale || !pm) continue;
-      const parcelRem = Math.round(sale.parcel_value - (pm.paid_amount || 0));
+      const parcelRem = Math.round(getParcelAmount(sale, ref.parcelIndex) - (pm.paid_amount || 0));
       const payAmt = Math.min(leftover, parcelRem);
       leftover -= payAmt;
       const totalPaid = Math.round((pm.paid_amount || 0) + payAmt);
-      const isFull = totalPaid >= sale.parcel_value;
+      const isFull = totalPaid >= getParcelAmount(sale, ref.parcelIndex);
       await DB.markPaid(ref.saleId, ref.parcelIndex, totalPaid, isFull);
       pm.paid_amount = totalPaid;
       if (isFull) pm.paid = true;
@@ -2363,7 +2373,7 @@ function renderFinanceiro() {
       if (!paymentGroups[groupKey]) {
         paymentGroups[groupKey] = { contact, total: 0, payments: [], sales: [] };
       }
-      paymentGroups[groupKey].total += Math.round(p.paid_amount || sale.parcel_value);
+      paymentGroups[groupKey].total += Math.round(p.paid_amount || getParcelAmount(sale, p.parcel_index));
       paymentGroups[groupKey].payments.push(p);
       if (!paymentGroups[groupKey].sales.find(s => s.id === sale.id)) {
         paymentGroups[groupKey].sales.push(sale);
@@ -3071,7 +3081,7 @@ function renderModal() {
           <div style="margin:12px 0;font-size:14px;color:#666">
             <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0"><span>Data da compra</span><span style="color:#1a1a1a">${dataCompra.getDate()}/${mesesAbr[dataCompra.getMonth()]}/${dataCompra.getFullYear()}</span></div>
             <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0"><span>Total</span><span style="color:#1a1a1a;font-weight:600">R$ ${sale.total}</span></div>
-            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0"><span>Parcelas</span><span style="color:#1a1a1a">${sale.parcels}x de R$ ${sale.parcel_value}</span></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0"><span>Parcelas</span><span style="color:#1a1a1a">${sale.parcels}x de R$ ${Math.round(sale.total / sale.parcels * 100) / 100}</span></div>
             <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f0f0"><span>Vencimento</span><span style="color:#1a1a1a">Todo dia ${sale.start_day}</span></div>
             <div style="display:flex;justify-content:space-between;padding:6px 0"><span>Pagamento</span><span style="color:#1a1a1a">${sale.payment_method === 'pix' ? 'Pix' : 'Cartão'}</span></div>
           </div>
