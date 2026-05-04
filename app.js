@@ -849,14 +849,16 @@ async function pdvSaveEditContact() {
 function pdvGoReview() {
   const contactId = document.getElementById('pdv-contact')?.value;
   const parcelsRaw = document.getElementById('pdv-parcels')?.value;
-  const day = parseInt(document.getElementById('pdv-day')?.value);
+  const dayRaw = document.getElementById('pdv-day')?.value;
+  const isDayAberto = dayRaw === 'aberto';
+  const day = isDayAberto ? 30 : parseInt(dayRaw);
   const method = document.querySelector('input[name="pdv-method"]:checked')?.value || 'pix';
   const totalDiscount = parseFloat(document.getElementById('pdv-total-discount')?.value) || 0;
   if (!contactId) { showToast('Selecione a cliente', '#A32D2D'); return; }
   if (!parcelsRaw) { showToast('Selecione o número de parcelas', '#A32D2D'); return; }
-  if (!day) { showToast('Selecione o dia de cobrança', '#A32D2D'); return; }
+  if (!dayRaw) { showToast('Selecione o dia de cobrança', '#A32D2D'); return; }
 
-  state._pdvReview = { contactId, parcelsRaw, day, method, totalDiscount };
+  state._pdvReview = { contactId, parcelsRaw, day, isDayAberto, method, totalDiscount };
   state.pdvStep = 'review';
   render();
 }
@@ -898,7 +900,7 @@ async function pdvSubmit() {
       items.push({ ...item, total: itemFinal, originalTotal: itemGross, itemDiscount: itemPerDiscount, parcel_value: Math.floor(itemFinal / parcels) });
     }
 
-    state.pdvResult = { items, contact, parcels, day, method, total, discount: totalDiscount, isAberto };
+    state.pdvResult = { items, contact, parcels, day, method, total, discount: totalDiscount, isAberto, isDayAberto: state._pdvReview?.isDayAberto || false };
     state.pdvStep = 'success';
     render();
   } catch (e) {
@@ -930,7 +932,7 @@ function pdvShareWhatsApp() {
   }
   msg += `*Total: R$ ${r.total.toLocaleString('pt-BR')}*\n`;
   msg += r.isAberto ? `*Em aberto*\n` : `*${r.parcels}x de R$ ${parcelVal.toLocaleString('pt-BR')}*\n`;
-  msg += `Vencimento: todo dia ${r.day}\n`;
+  msg += r.isDayAberto ? `Vencimento: em aberto\n` : `Vencimento: todo dia ${r.day}\n`;
   if (r.method === 'pix') {
     msg += `Pagamento: Pix\n\nNome do Pix: ${CONFIG.pixNome}\nChave PIX celular: ${CONFIG.pixChave}\n\n`;
   } else {
@@ -1080,7 +1082,7 @@ function renderPDV() {
   // ── STEP: PAYMENT ──
   if (state.pdvStep === 'payment') {
     const selId = state._pdvSelectedContact || '';
-    const opts = `<option value="" disabled ${!selId ? 'selected' : ''}>Selecione a cliente</option>` + state.contacts.map(c => `<option value="${c.id}" ${c.id === selId ? 'selected' : ''}>${c.name}</option>`).join('');
+    const opts = `<option value="" disabled ${!selId ? 'selected' : ''}>Selecione a cliente</option>` + state.contacts.map(c => `<option value="${c.id}" ${c.id === selId ? 'selected' : ''}>${c.name}${c.local ? ' (' + c.local + ')' : ''}</option>`).join('');
     const selContact = selId ? state.contacts.find(c => c.id === selId) : null;
     return `<div class="pdv-overlay">
       ${topbar('pdvPaymentBack()', 'Pagamento')}
@@ -1123,6 +1125,7 @@ function renderPDV() {
             <select class="form-input" id="pdv-day">
               <option value="" disabled selected>—</option>
               ${Array.from({length:31},(_,i)=>`<option value="${i+1}">${i+1}</option>`).join('')}
+              <option value="aberto">Em aberto</option>
             </select>
           </div>
         </div>
@@ -1230,7 +1233,7 @@ function renderPDV() {
             </div>
             <div class="pdv-review-info-row">
               <span class="pdv-review-info-label">Dia de cobrança</span>
-              <span class="pdv-review-info-value">Dia ${rv.day}</span>
+              <span class="pdv-review-info-value">${rv.isDayAberto ? 'Em aberto' : 'Dia ' + rv.day}</span>
             </div>
             <div class="pdv-review-info-row">
               <span class="pdv-review-info-label">Pagamento</span>
@@ -1256,7 +1259,7 @@ function renderPDV() {
         <div class="pdv-success-title">Venda registrada!</div>
         <div class="pdv-receipt">
           <div class="pdv-receipt-hero">
-            <div class="pdv-receipt-day">Dia ${r.day}</div>
+            <div class="pdv-receipt-day">${r.isDayAberto ? 'Em aberto' : 'Dia ' + r.day}</div>
             <div class="pdv-receipt-parcels">${r.isAberto ? 'Em aberto' : r.parcels + 'x de R$ ' + pv.toLocaleString('pt-BR')}</div>
           </div>
           <div class="pdv-receipt-divider"></div>
@@ -1442,7 +1445,7 @@ function sendTransactionSummary(contactId, saleIdsStr) {
   });
   msg += `\n*Total: R$ ${total.toLocaleString('pt-BR')}*\n`;
   msg += parcelsNum === 1 && txSales[0].parcels === 1 ? `*Em aberto*\n` : `*${parcelsNum}x de R$ ${parcelVal.toLocaleString('pt-BR')}*\n`;
-  msg += `Vencimento: todo dia ${day}\n`;
+  msg += `Vencimento: ${day === 30 ? 'em aberto' : 'todo dia ' + day}\n`;
   if (method === 'pix') {
     msg += `Pagamento: Pix\n\nNome do Pix: ${CONFIG.pixNome}\nChave PIX celular: ${CONFIG.pixChave}\n\n`;
   } else {
@@ -1921,6 +1924,13 @@ function renderHome() {
           return d.getDate() === hoje.getDate() && d.getMonth() === hoje.getMonth() && d.getFullYear() === hoje.getFullYear();
         });
         const totalHoje = vendasHoje.reduce((a, s) => a + s.total, 0);
+        // Group by transaction
+        const txKeys = new Set();
+        vendasHoje.forEach(s => {
+          const t = new Date(s.created_at);
+          txKeys.add(`${t.getFullYear()}-${t.getMonth()}-${t.getDate()}-${t.getHours()}-${t.getMinutes()}`);
+        });
+        const numVendas = txKeys.size;
         const recebidoHoje = state.payments.filter(p => {
           if (!p.paid || !p.paid_at) return false;
           const d = new Date(p.paid_at);
@@ -1934,7 +1944,7 @@ function renderHome() {
           <div class="home-day-summary" onclick="state.modal='vendasDia';render()">
             <div class="home-day-stats">
               <div class="home-day-stat">
-                <div class="home-day-stat-num">${vendasHoje.length}</div>
+                <div class="home-day-stat-num">${numVendas}</div>
                 <div class="home-day-stat-label">vendas</div>
               </div>
               <div class="home-day-stat">
@@ -2925,20 +2935,31 @@ function renderModal() {
       return d.getDate() === today.getDate() && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
     });
     const totalHoje = vendasHoje.reduce((a, s) => a + s.total, 0);
+    // Group by transaction
+    const txGroups = {};
+    vendasHoje.forEach(s => {
+      const t = new Date(s.created_at);
+      const key = `${t.getFullYear()}-${t.getMonth()}-${t.getDate()}-${t.getHours()}-${t.getMinutes()}`;
+      if (!txGroups[key]) txGroups[key] = { sales: [], contact: getContact(s.contact_id) };
+      txGroups[key].sales.push(s);
+    });
+    const txList = Object.values(txGroups);
     return `<div class="modal-overlay" onclick="closeModal()">
       <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:85vh">
         <div class="modal-title">Vendas do dia</div>
-        <div class="modal-subtitle">${vendasHoje.length} venda${vendasHoje.length !== 1 ? 's' : ''} · Total: R$ ${totalHoje.toLocaleString('pt-BR')}</div>
-        ${vendasHoje.length === 0 ? '<div style="text-align:center;color:#aaa;padding:24px 0;font-size:14px">Nenhuma venda registrada hoje.</div>' : `
+        <div class="modal-subtitle">${txList.length} venda${txList.length !== 1 ? 's' : ''} · ${vendasHoje.length} ${vendasHoje.length !== 1 ? 'itens' : 'item'} · Total: R$ ${totalHoje.toLocaleString('pt-BR')}</div>
+        ${txList.length === 0 ? '<div style="text-align:center;color:#aaa;padding:24px 0;font-size:14px">Nenhuma venda registrada hoje.</div>' : `
           <div style="margin-top:8px">
-            ${vendasHoje.map(s => {
-              const contact = getContact(s.contact_id);
-              return `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #f5f5f5">
-                <div style="flex:1;min-width:0">
-                  <div style="font-size:15px;font-weight:500;color:#1a1a1a">${s.description}</div>
-                  <div style="font-size:13px;color:#888;margin-top:2px">${contact?.name || '—'} · ${s.parcels}x R$ ${s.parcel_value} · ${s.payment_method === 'pix' ? 'Pix' : 'Cartão'}${s.category ? ' · ' + (s.category === 'joia' ? 'Jóia' : 'Mary Kay') : ''}</div>
+            ${txList.map(tx => {
+              const txTotal = tx.sales.reduce((a, s) => a + s.total, 0);
+              const first = tx.sales[0];
+              return `<div style="padding:12px 0;border-bottom:1px solid #f5f5f5">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <div style="font-size:15px;font-weight:500;color:#1a1a1a">${tx.contact?.name || '—'}</div>
+                  <div style="font-size:16px;font-weight:600;color:#1a1a1a">R$ ${txTotal.toLocaleString('pt-BR')}</div>
                 </div>
-                <div style="font-size:16px;font-weight:600;color:#1a1a1a;margin-left:12px">R$ ${s.total.toLocaleString('pt-BR')}</div>
+                <div style="font-size:12px;color:#888;margin-top:2px">${tx.sales.length} ${tx.sales.length > 1 ? 'itens' : 'item'} · ${first.parcels}x · ${first.payment_method === 'pix' ? 'Pix' : 'Cartão'} · Dia ${first.start_day}</div>
+                ${tx.sales.map(s => `<div style="font-size:13px;color:#555;margin-top:4px">• ${s.description} — R$ ${s.total}</div>`).join('')}
               </div>`;
             }).join('')}
           </div>
