@@ -2295,6 +2295,7 @@ function renderFinanceiro() {
   const mesesNomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   const today = new Date();
   let filterMonth, filterYear, periodLabel;
+  const isCompleto = state.financePeriod === 'completo';
 
   if (state.financePeriod === 'custom' && state.financeCustomMonth) {
     const [y, m] = state.financeCustomMonth.split('-');
@@ -2308,6 +2309,7 @@ function renderFinanceiro() {
   }
 
   const isInPeriod = (dateStr) => {
+    if (isCompleto) return !!dateStr;
     if (!dateStr) return false;
     const d = new Date(dateStr);
     return d.getMonth() === filterMonth && d.getFullYear() === filterYear;
@@ -2324,7 +2326,7 @@ function renderFinanceiro() {
   const aReceberItems = [];
   state.sales.forEach(sale => {
     getSaleParcels(sale).forEach(p => {
-      if (!p.paid && p.date.getMonth() === filterMonth && p.date.getFullYear() === filterYear) {
+      if (!p.paid && (isCompleto || (p.date.getMonth() === filterMonth && p.date.getFullYear() === filterYear))) {
         aReceberItems.push({ sale, parcel: p, contact: getContact(sale.contact_id) });
       }
     });
@@ -2419,7 +2421,8 @@ function renderFinanceiro() {
       </div>
       <div class="filter-tabs">
         <button class="filter-tab ${state.financePeriod === 'mes' ? 'active' : ''}" onclick="setFinancePeriod('mes')">Este mês</button>
-        <button class="filter-tab ${state.financePeriod === 'custom' ? 'active' : ''}" onclick="setFinancePeriod('custom')">${state.financePeriod === 'custom' ? periodLabel : 'Selecionar período'}</button>
+        <button class="filter-tab ${state.financePeriod === 'custom' ? 'active' : ''}" onclick="setFinancePeriod('custom')">${state.financePeriod === 'custom' ? periodLabel : 'Período'}</button>
+        <button class="filter-tab ${state.financePeriod === 'completo' ? 'active' : ''}" onclick="setFinancePeriod('completo')">Completo</button>
       </div>
       <div class="metric-grid" style="grid-template-columns:1fr 1fr 1fr">
         <div class="metric-card ${sel === 'recebido' ? 'metric-card-active' : ''}" onclick="selectFinanceCard('recebido')" style="cursor:pointer">
