@@ -1629,7 +1629,7 @@ async function openTransactionPaidModal(saleIdsStr, parcelIndex) {
     const sale = state.sales.find(s => s.id === saleId);
     const pm = state.payments.find(p => p.sale_id === saleId && p.parcel_index === parcelIndex);
     if (sale && pm && !pm.paid) {
-      const rem = Math.round(getParcelAmount(sale, ref.parcelIndex) - (pm.paid_amount || 0));
+      const rem = Math.round(getParcelAmount(sale, parcelIndex) - (pm.paid_amount || 0));
       totalAmount += rem;
       refs.push({ saleId, parcelIndex, remaining: rem });
     }
