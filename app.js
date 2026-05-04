@@ -2660,7 +2660,7 @@ function renderDetail(contactId) {
                       <span class="parcel-date">${p.dateStr}</span>
                       <div class="parcel-status">
                         <span class="badge ${p.paid ? 'badge-ok' : 'badge-due'}">${p.paid ? 'Pago' : 'R$ ' + p.remaining}</span>
-                        ${!p.paid ? `<button style="background:none;border:none;cursor:pointer;font-size:12px;color:#D4537E;padding:0" onclick="openTransactionPaidModal('${g.ids.join(',')}',${p.index})">Registrar</button>` : `<button style="background:none;border:none;cursor:pointer;font-size:11px;color:#A32D2D;padding:0" onclick="undoTransactionParcel('${g.ids.join(',')}',${p.index})">Desfazer</button>`}
+                        ${p.paid ? `<button style="background:none;border:none;cursor:pointer;font-size:11px;color:#A32D2D;padding:0" onclick="undoTransactionParcel('${g.ids.join(',')}',${p.index})">Desfazer</button>` : ''}
                       </div>
                     </div>`).join('')}
                 </div>
