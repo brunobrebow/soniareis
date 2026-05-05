@@ -1878,7 +1878,7 @@ function renderHome() {
 
       <div class="home-section-title">Resumo mensal</div>
 
-      <div class="home-card home-card-main">
+      <div class="home-card home-card-main" style="${(() => { const sp = Math.round(vendasMes / state.metaMensal * 100); const dp = Math.round(diaNum / new Date(anoAtual, mesAtual + 1, 0).getDate() * 100); return sp >= dp ? 'background:rgba(59,109,17,0.06);border:1px solid rgba(59,109,17,0.15)' : 'background:rgba(163,45,45,0.06);border:1px solid rgba(163,45,45,0.15)'; })()}">
         ${(() => {
           const salesPct = Math.round(vendasMes / state.metaMensal * 100);
           const daysInMonth = new Date(anoAtual, mesAtual + 1, 0).getDate();

@@ -117,7 +117,7 @@ body {
 .home-date { font-size: 14px; color: #aaa; margin-top: 4px; text-transform: capitalize; }
 
 .home-card { background: #fff; border: 1px solid #f0f0f0; border-radius: 16px; padding: 18px; margin: 0 16px 14px; }
-.home-card-main { background: #f9f9f9; }
+.home-card-main { }
 .home-card-row { display: flex; justify-content: space-between; align-items: flex-end; }
 .home-card-label { font-size: 12px; color: #aaa; margin-bottom: 4px; }
 .home-card-big { font-size: 22px; font-weight: 700; }
