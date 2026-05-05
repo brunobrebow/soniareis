@@ -206,6 +206,39 @@ function confirmDeleteTransaction(saleIdsStr) {
   render();
 }
 
+function openEditTransaction(saleIdsStr) {
+  state._editTransactionIds = saleIdsStr;
+  state.modal = 'editTransaction';
+  render();
+}
+
+async function saveEditTransaction() {
+  const ids = state._editTransactionIds?.split(',') || [];
+  const parcels = parseInt(document.getElementById('et-parcels')?.value) || 1;
+  const dayRaw = document.getElementById('et-day')?.value;
+  const day = dayRaw === 'aberto' ? 30 : parseInt(dayRaw);
+  const method = document.getElementById('et-method')?.value || 'pix';
+
+  try {
+    for (let i = 0; i < ids.length; i++) {
+      const sale = state.sales.find(s => s.id === ids[i]);
+      if (!sale) continue;
+      const desc = document.getElementById('et-desc-' + i)?.value?.trim() || sale.description;
+      const total = parseFloat(document.getElementById('et-total-' + i)?.value) || sale.total;
+      const parcelValue = Math.floor(total / parcels);
+
+      const updated = await DB.updateSale(ids[i], { description: desc, total, parcels, parcel_value: parcelValue, start_day: day, payment_method: method });
+      const idx = state.sales.findIndex(s => s.id === ids[i]);
+      if (idx >= 0) state.sales[idx] = updated;
+    }
+    closeModal();
+    showToast('Venda atualizada!');
+  } catch (e) {
+    showToast('Erro ao salvar.', '#A32D2D');
+    console.error(e);
+  }
+}
+
 async function executeDeleteTransaction() {
   const ids = state._deleteTransactionIds?.split(',');
   if (!ids) return;
@@ -2692,7 +2725,7 @@ function renderDetail(contactId) {
                   </div>
                   <div style="display:flex;gap:6px">
                     <button onclick="sendTransactionSummary('${c.id}','${g.ids.join(',')}')" style="background:#25D366;border:none;border-radius:8px;color:white;font-size:11px;padding:6px 10px;cursor:pointer;white-space:nowrap">📩 Enviar</button>
-                    <button onclick="confirmDeleteTransaction('${g.ids.join(',')}')" style="background:none;border:1px solid #ddd;border-radius:8px;color:#A32D2D;font-size:11px;padding:6px 8px;cursor:pointer">🗑️</button>
+                    <button onclick="openEditTransaction('${g.ids.join(',')}')" style="background:none;border:1px solid #ddd;border-radius:8px;color:#666;font-size:11px;padding:6px 8px;cursor:pointer">✏️</button>
                   </div>
                 </div>
                 <div style="padding:8px 0 4px">
@@ -2771,6 +2804,49 @@ function renderModal() {
         <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
       </div>
     </div>`;
+  }
+
+  if (state.modal === 'editTransaction' && state._editTransactionIds) {
+    const ids = state._editTransactionIds.split(',');
+    const txSales = ids.map(id => state.sales.find(s => s.id === id)).filter(Boolean);
+    if (txSales.length > 0) {
+      const first = txSales[0];
+      return `<div class="modal-overlay" onclick="closeModal()">
+        <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:85vh">
+          <div class="modal-title">Editar venda</div>
+          ${txSales.map((s, i) => `
+            <div style="background:#f9f9f9;border-radius:10px;padding:10px;margin-bottom:8px">
+              <div class="form-group" style="margin-bottom:8px"><label class="form-label">Produto ${i + 1}</label><input class="form-input" id="et-desc-${i}" value="${s.description}" /></div>
+              <div class="form-group" style="margin-bottom:0"><label class="form-label">Total (R$)</label><input class="form-input" id="et-total-${i}" type="number" inputmode="decimal" value="${s.total}" /></div>
+            </div>
+          `).join('')}
+          <div class="form-group">
+            <label class="form-label">Parcelas</label>
+            <select class="form-input" id="et-parcels">
+              ${Array.from({length:12},(_,i)=>`<option value="${i+1}" ${i+1 === first.parcels ? 'selected' : ''}>${i+1}x</option>`).join('')}
+              <option value="1" ${first.parcels === 1 ? 'selected' : ''}>Em aberto</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Dia de cobrança</label>
+            <select class="form-input" id="et-day">
+              ${Array.from({length:31},(_,i)=>`<option value="${i+1}" ${i+1 === first.start_day ? 'selected' : ''}>${i+1}</option>`).join('')}
+              <option value="aberto" ${first.start_day === 30 ? '' : ''}>Em aberto</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Forma de pagamento</label>
+            <select class="form-input" id="et-method">
+              <option value="pix" ${first.payment_method === 'pix' ? 'selected' : ''}>Pix</option>
+              <option value="cartao" ${first.payment_method === 'cartao' ? 'selected' : ''}>Cartão</option>
+            </select>
+          </div>
+          <button class="btn-primary" onclick="saveEditTransaction()">Salvar alterações</button>
+          <button onclick="confirmDeleteTransaction('${ids.join(',')}')" style="width:100%;padding:12px;background:none;border:1px solid #A32D2D;border-radius:10px;color:#A32D2D;font-size:14px;cursor:pointer;margin-top:8px">Excluir venda</button>
+          <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+        </div>
+      </div>`;
+    }
   }
 
   if (state.modal === 'deleteTransaction') {

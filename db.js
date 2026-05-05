@@ -138,4 +138,15 @@ const DB = {
     if (error) throw error;
   },
 
+  async updateSale(saleId, updates) {
+    const { data, error } = await getClient()
+      .from('sales')
+      .update(updates)
+      .eq('id', saleId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
 };
