@@ -1879,10 +1879,18 @@ function renderHome() {
       <div class="home-section-title">Resumo mensal</div>
 
       <div class="home-card home-card-main">
+        ${(() => {
+          const salesPct = Math.round(vendasMes / state.metaMensal * 100);
+          const daysInMonth = new Date(anoAtual, mesAtual + 1, 0).getDate();
+          const dayPct = Math.round(diaNum / daysInMonth * 100);
+          const isAhead = salesPct >= dayPct;
+          const barColor = isAhead ? '#3B6D11' : '#A32D2D';
+          const numColor = isAhead ? '#3B6D11' : '#A32D2D';
+          return `
         <div class="home-card-row">
           <div>
             <div class="home-card-label">Meta mensal</div>
-            <div class="home-card-big" style="color:#1a1a1a">R$ ${vendasMes.toLocaleString('pt-BR')}</div>
+            <div class="home-card-big" style="color:${numColor}">R$ ${vendasMes.toLocaleString('pt-BR')}</div>
           </div>
           <div style="text-align:right">
             <div class="home-card-label">Meta</div>
@@ -1890,15 +1898,16 @@ function renderHome() {
           </div>
         </div>
         <div class="home-progress-bg">
-          <div class="home-progress-fill" style="width:${Math.min(100, Math.round(vendasMes / state.metaMensal * 100))}%"></div>
+          <div class="home-progress-fill" style="width:${Math.min(100, salesPct)}%;background:${barColor}"></div>
         </div>
         <div class="home-progress-bg" style="margin-top:4px">
-          <div class="home-progress-fill home-progress-day" style="width:${Math.round(diaNum / new Date(anoAtual, mesAtual + 1, 0).getDate() * 100)}%"></div>
+          <div class="home-progress-fill home-progress-day" style="width:${dayPct}%"></div>
         </div>
         <div class="home-card-row" style="margin-top:4px">
-          <span class="home-card-sub">${Math.round(vendasMes / state.metaMensal * 100)}% da meta · dia ${diaNum}/${new Date(anoAtual, mesAtual + 1, 0).getDate()}</span>
+          <span class="home-card-sub">${salesPct}% da meta · dia ${diaNum}/${daysInMonth}</span>
           <span class="home-card-sub home-meta-link" onclick="setMeta()">Redefinir meta</span>
-        </div>
+        </div>`;
+        })()}
       </div>
 
       <div class="home-stats-row">
