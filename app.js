@@ -200,6 +200,29 @@ function confirmDeleteAgenda() {
   }
 }
 
+function confirmDeleteTransaction(saleIdsStr) {
+  state._deleteTransactionIds = saleIdsStr;
+  state.modal = 'deleteTransaction';
+  render();
+}
+
+async function executeDeleteTransaction() {
+  const ids = state._deleteTransactionIds?.split(',');
+  if (!ids) return;
+  try {
+    for (const id of ids) {
+      await DB.deleteSale(id);
+      state.sales = state.sales.filter(s => s.id !== id);
+      state.payments = state.payments.filter(p => p.sale_id !== id);
+    }
+    closeModal();
+    showToast('Venda excluída!');
+  } catch (e) {
+    showToast('Erro ao excluir.', '#A32D2D');
+    console.error(e);
+  }
+}
+
 function openFullPayment(contactId) {
   const contact = getContact(contactId);
   if (!contact) return;
@@ -2667,7 +2690,10 @@ function renderDetail(contactId) {
                     <div style="font-size:13px;color:#888">${g.date} · ${g.sales.length} ${g.sales.length === 1 ? 'item' : 'itens'} · ${method === 'pix' ? 'Pix' : 'Cartão'}</div>
                     <div style="font-size:16px;font-weight:600;color:#1a1a1a;margin-top:2px">R$ ${gTotal.toLocaleString('pt-BR')} · ${numParcels}x R$ ${Math.round(gTotal / numParcels * 100) / 100} · Dia ${day}</div>
                   </div>
-                  <button onclick="sendTransactionSummary('${c.id}','${g.ids.join(',')}')" style="background:#25D366;border:none;border-radius:8px;color:white;font-size:11px;padding:6px 10px;cursor:pointer;white-space:nowrap">📩 Enviar</button>
+                  <div style="display:flex;gap:6px">
+                    <button onclick="sendTransactionSummary('${c.id}','${g.ids.join(',')}')" style="background:#25D366;border:none;border-radius:8px;color:white;font-size:11px;padding:6px 10px;cursor:pointer;white-space:nowrap">📩 Enviar</button>
+                    <button onclick="confirmDeleteTransaction('${g.ids.join(',')}')" style="background:none;border:1px solid #ddd;border-radius:8px;color:#A32D2D;font-size:11px;padding:6px 8px;cursor:pointer">🗑️</button>
+                  </div>
                 </div>
                 <div style="padding:8px 0 4px">
                   ${g.sales.map(s => `<div style="font-size:13px;color:#555;padding:2px 0">• ${s.description} — R$ ${s.total}</div>`).join('')}
@@ -2742,6 +2768,24 @@ function renderModal() {
           ${salesCount > 0 ? `<br><br>⚠️ Isso também vai excluir ${salesCount} venda(s) e todas as parcelas. Não pode ser desfeito.` : '<br><br>Esta ação não pode ser desfeita.'}
         </div>
         <button class="btn-danger" onclick="confirmDeleteContact()">Excluir permanentemente</button>
+        <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+      </div>
+    </div>`;
+  }
+
+  if (state.modal === 'deleteTransaction') {
+    const ids = state._deleteTransactionIds?.split(',') || [];
+    const txSales = ids.map(id => state.sales.find(s => s.id === id)).filter(Boolean);
+    const txTotal = txSales.reduce((a, s) => a + s.total, 0);
+    return `<div class="modal-overlay" onclick="closeModal()">
+      <div class="modal-sheet" onclick="event.stopPropagation()">
+        <div class="modal-title">Excluir venda?</div>
+        <div class="modal-subtitle">${txSales.length} ${txSales.length === 1 ? 'produto' : 'produtos'} · R$ ${txTotal.toLocaleString('pt-BR')}</div>
+        <div style="margin:12px 0">
+          ${txSales.map(s => `<div style="font-size:13px;color:#555;padding:3px 0">• ${s.description} — R$ ${s.total}</div>`).join('')}
+        </div>
+        <div style="font-size:13px;color:#A32D2D;text-align:center;padding:8px 0">Esta ação não pode ser desfeita. A venda, parcelas e pagamentos serão removidos permanentemente.</div>
+        <button onclick="executeDeleteTransaction()" style="width:100%;padding:12px;background:#A32D2D;border:none;border-radius:10px;color:white;font-size:14px;font-weight:600;cursor:pointer;margin:8px 0">Confirmar exclusão</button>
         <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
       </div>
     </div>`;

@@ -132,4 +132,10 @@ const DB = {
     return data;
   },
 
+  async deleteSale(saleId) {
+    await getClient().from('payments').delete().eq('sale_id', saleId);
+    const { error } = await getClient().from('sales').delete().eq('id', saleId);
+    if (error) throw error;
+  },
+
 };
