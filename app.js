@@ -1596,7 +1596,7 @@ async function confirmGroupPayment() {
       leftover -= payAmount;
 
       const totalPaid = Math.round((payment.paid_amount || 0) + payAmount);
-      const isFullPayment = totalPaid >= pAmt;
+      const isFullPayment = totalPaid >= pAmt2;
 
       await DB.markPaid(p.saleId, p.parcelIndex, totalPaid, isFullPayment);
       payment.paid_amount = totalPaid;
