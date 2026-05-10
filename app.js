@@ -441,18 +441,27 @@ function getParcelAmount(sale, parcelIndex) {
 }
 
 function getSaleParcels(sale) {
-  const today = new Date();
-  const m = today.getMonth();
-  const y = today.getFullYear();
   const paymentsByIndex = {};
   state.payments
     .filter(p => p.sale_id === sale.id)
     .forEach(p => { paymentsByIndex[p.parcel_index] = p; });
 
-  const paidCount = Object.values(paymentsByIndex).filter(p => p.paid).length;
+  // First parcel = month AFTER sale creation
+  const created = new Date(sale.created_at);
+  const startMonth = created.getMonth() + 1; // next month
+  const startYear = created.getFullYear();
 
   return Array.from({ length: sale.parcels }, (_, i) => {
-    const d = new Date(y, m - paidCount + i, sale.start_day);
+    // Calculate target month/year
+    let targetMonth = startMonth + i;
+    let targetYear = startYear;
+    while (targetMonth > 11) { targetMonth -= 12; targetYear++; }
+
+    // Handle day edge case (e.g. day 31 in a month with 30 days)
+    const daysInMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+    const day = Math.min(sale.start_day, daysInMonth);
+    const d = new Date(targetYear, targetMonth, day);
+
     const payment = paymentsByIndex[i];
     const paidAmount = payment?.paid_amount || 0;
     const parcelAmount = (i === sale.parcels - 1) ? sale.total - sale.parcel_value * (sale.parcels - 1) : sale.parcel_value;
@@ -472,7 +481,7 @@ function getSaleParcels(sale) {
 
 function getDueCharges(filter) {
   const today = new Date();
-  const todayNum = today.getDate();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const m = today.getMonth();
   const y = today.getFullYear();
   const result = [];
@@ -481,12 +490,11 @@ function getDueCharges(filter) {
     const parcels = getSaleParcels(sale);
     parcels.forEach(p => {
       if (p.paid) return;
-      const day = p.date.getDate();
-      const mo = p.date.getMonth();
-      const yr = p.date.getFullYear();
-      const isToday = day === todayNum && mo === m && yr === y;
-      const isPast = p.date < today && !isToday;
-      const isUpcoming = p.date > today && mo === m;
+      const pDateStart = new Date(p.date.getFullYear(), p.date.getMonth(), p.date.getDate());
+      const isToday = pDateStart.getTime() === todayStart.getTime();
+      const isPast = pDateStart < todayStart;
+      const isThisMonth = p.date.getMonth() === m && p.date.getFullYear() === y;
+      const isUpcoming = pDateStart > todayStart && isThisMonth;
       if (filter === 'hoje' && !isToday) return;
       if (filter === 'atrasado' && !isPast) return;
       if (filter === 'mes' && !(isToday || isUpcoming || isPast)) return;
