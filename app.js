@@ -467,9 +467,10 @@ function getSaleParcels(sale) {
     .filter(p => p.sale_id === sale.id)
     .forEach(p => { paymentsByIndex[p.parcel_index] = p; });
 
-  // First parcel = month AFTER sale creation
+  // First parcel month based on offset (0 = same month, 1 = next month)
   const created = new Date(sale.created_at);
-  const startMonth = created.getMonth() + 1; // next month
+  const offset = sale.start_month_offset !== undefined && sale.start_month_offset !== null ? sale.start_month_offset : 1;
+  const startMonth = created.getMonth() + offset;
   const startYear = created.getFullYear();
 
   return Array.from({ length: sale.parcels }, (_, i) => {
@@ -618,6 +619,7 @@ async function addSale() {
       parcels,
       parcel_value: Math.floor(total / parcels),
       start_day: day,
+      start_month_offset: 1,
       payment_method: 'pix'
     });
     state.sales.push(newSale);
@@ -937,19 +939,20 @@ function pdvGoReview() {
   const dayRaw = document.getElementById('pdv-day')?.value;
   const isDayAberto = dayRaw === 'aberto';
   const day = isDayAberto ? 30 : parseInt(dayRaw);
+  const startMonthOffset = parseInt(document.querySelector('input[name="pdv-startmonth"]:checked')?.value || '1');
   const method = document.querySelector('input[name="pdv-method"]:checked')?.value || 'pix';
   const totalDiscount = parseFloat(document.getElementById('pdv-total-discount')?.value) || 0;
   if (!contactId) { showToast('Selecione a cliente', '#A32D2D'); return; }
   if (!parcelsRaw) { showToast('Selecione o número de parcelas', '#A32D2D'); return; }
   if (!dayRaw) { showToast('Selecione o dia de cobrança', '#A32D2D'); return; }
 
-  state._pdvReview = { contactId, parcelsRaw, day, isDayAberto, method, totalDiscount };
+  state._pdvReview = { contactId, parcelsRaw, day, isDayAberto, startMonthOffset, method, totalDiscount };
   state.pdvStep = 'review';
   render();
 }
 
 async function pdvSubmit() {
-  const { contactId, parcelsRaw, day, method, totalDiscount } = state._pdvReview;
+  const { contactId, parcelsRaw, day, startMonthOffset, method, totalDiscount } = state._pdvReview;
   const isAberto = parcelsRaw === 'aberto';
   const parcels = isAberto ? 1 : parseInt(parcelsRaw);
 
@@ -976,6 +979,7 @@ async function pdvSubmit() {
         parcels,
         parcel_value: Math.floor(itemFinal / parcels),
         start_day: day,
+        start_month_offset: startMonthOffset,
         payment_method: method,
         category: item.category
       });
@@ -1215,6 +1219,15 @@ function renderPDV() {
           </div>
         </div>
         <div class="pdv-form-group">
+          <label class="pdv-form-label">Primeira parcela</label>
+          <div class="pdv-toggle-row">
+            <input type="radio" name="pdv-startmonth" id="pdv-sm-current" value="0" class="pdv-toggle-input" />
+            <label for="pdv-sm-current" class="pdv-toggle-btn">Este mês</label>
+            <input type="radio" name="pdv-startmonth" id="pdv-sm-next" value="1" checked class="pdv-toggle-input" />
+            <label for="pdv-sm-next" class="pdv-toggle-btn">Próximo mês</label>
+          </div>
+        </div>
+        <div class="pdv-form-group">
           <label class="pdv-form-label">Desconto na venda (R$)</label>
           <input class="form-input" id="pdv-total-discount" type="number" inputmode="decimal" placeholder="Valor do desconto" value="${state._pdvTotalDiscount || ''}" oninput="pdvUpdateDiscountSummary()" />
         </div>
@@ -1319,6 +1332,10 @@ function renderPDV() {
             <div class="pdv-review-info-row">
               <span class="pdv-review-info-label">Dia de cobrança</span>
               <span class="pdv-review-info-value">${rv.isDayAberto ? 'Em aberto' : 'Dia ' + rv.day}</span>
+            </div>
+            <div class="pdv-review-info-row">
+              <span class="pdv-review-info-label">Primeira parcela</span>
+              <span class="pdv-review-info-value">${rv.startMonthOffset === 0 ? 'Este mês' : 'Próximo mês'}</span>
             </div>
             <div class="pdv-review-info-row">
               <span class="pdv-review-info-label">Pagamento</span>
