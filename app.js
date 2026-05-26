@@ -239,6 +239,7 @@ async function saveEditTransaction() {
   const dayRaw = document.getElementById('et-day')?.value;
   const day = dayRaw === 'aberto' ? 30 : parseInt(dayRaw);
   const method = document.getElementById('et-method')?.value || 'pix';
+  const startMonthOffset = parseInt(document.getElementById('et-offset')?.value ?? '1');
 
   try {
     for (let i = 0; i < ids.length; i++) {
@@ -248,7 +249,7 @@ async function saveEditTransaction() {
       const total = parseFloat(document.getElementById('et-total-' + i)?.value) || sale.total;
       const parcelValue = Math.floor(total / parcels);
 
-      const updated = await DB.updateSale(ids[i], { description: desc, total, parcels, parcel_value: parcelValue, start_day: day, payment_method: method });
+      const updated = await DB.updateSale(ids[i], { description: desc, total, parcels, parcel_value: parcelValue, start_day: day, start_month_offset: startMonthOffset, payment_method: method });
       const idx = state.sales.findIndex(s => s.id === ids[i]);
       if (idx >= 0) state.sales[idx] = updated;
     }
@@ -2885,6 +2886,13 @@ function renderModal() {
             <select class="form-input" id="et-method">
               <option value="pix" ${first.payment_method === 'pix' ? 'selected' : ''}>Pix</option>
               <option value="cartao" ${first.payment_method === 'cartao' ? 'selected' : ''}>Cartão</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Primeira parcela</label>
+            <select class="form-input" id="et-offset">
+              <option value="0" ${first.start_month_offset === 0 ? 'selected' : ''}>Mês da venda</option>
+              <option value="1" ${first.start_month_offset !== 0 ? 'selected' : ''}>Mês seguinte</option>
             </select>
           </div>
           <button class="btn-primary" onclick="saveEditTransaction()">Salvar alterações</button>
