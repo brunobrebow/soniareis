@@ -1006,7 +1006,7 @@ function pdvShareWhatsApp() {
   const rawSub = r.items.reduce((a, i) => a + i.value * (i.qty || 1), 0);
   const itemDiscTotal = r.items.reduce((a, i) => a + (i.itemDiscount || 0), 0);
   const hasDiscount = itemDiscTotal > 0 || r.discount > 0;
-  let msg = `*Resumo da compra*\n\n`;
+  let msg = `*Resumo da sua compra de hoje*\n\n`;
   r.items.forEach(item => {
     const itemGross = item.value * (item.qty || 1);
     msg += `• ${item.qty > 1 ? item.qty + 'x ' : ''}${item.description} (${item.category === 'joia' ? 'Jóia' : 'Mary Kay'}) — R$ ${itemGross.toLocaleString('pt-BR')}\n`;
@@ -1542,7 +1542,7 @@ function sendTransactionSummary(contactId, saleIdsStr) {
   const day = txSales[0].start_day;
   const parcelVal = Math.round(total / parcelsNum * 100) / 100;
 
-  let msg = `*Resumo da compra*\n\n`;
+  let msg = `*Resumo da sua compra de hoje*\n\n`;
   txSales.forEach(s => {
     msg += `• ${s.description} (${s.category === 'joia' ? 'Jóia' : 'Mary Kay'}) — R$ ${s.total.toLocaleString('pt-BR')}\n`;
   });
