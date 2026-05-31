@@ -311,6 +311,12 @@ body {
 .pdv-form-row { display: flex; gap: 12px; }
 .pdv-new-client { background: none; border: none; color: #D4537E; font-size: 13px; cursor: pointer; padding: 6px 0; }
 
+.pdv-autocomplete { position: relative; }
+.pdv-contact-list { position: absolute; top: 100%; left: 0; right: 0; background: #1a1a1a; border: 1px solid #333; border-radius: 10px; max-height: 180px; overflow-y: auto; z-index: 10; margin-top: 4px; }
+.pdv-contact-option { padding: 12px 14px; font-size: 14px; color: #fff; cursor: pointer; border-bottom: 1px solid #222; }
+.pdv-contact-option:last-child { border-bottom: none; }
+.pdv-contact-option:active { background: #333; }
+
 .pdv-toggle-row { display: flex; gap: 10px; }
 .pdv-toggle-input { display: none; }
 .pdv-toggle-btn { flex: 1; padding: 12px; border: 2px solid #444; border-radius: 12px; text-align: center; color: #aaa; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.15s; }

@@ -899,35 +899,47 @@ function pdvUpdateDiscountSummary() {
 }
 
 function pdvUpdatePhone() {
-  const sel = document.getElementById('pdv-contact');
   const display = document.getElementById('pdv-phone-display');
-  if (sel && display) {
-    const c = state.contacts.find(c => c.id === sel.value);
+  if (display) {
+    const c = state.contacts.find(c => c.id === state._pdvSelectedContact);
     display.textContent = c ? '+' + c.phone : '';
   }
 }
 
-function pdvFilterContacts() {
-  const query = (document.getElementById('pdv-contact-search')?.value || '').toLowerCase();
-  const sel = document.getElementById('pdv-contact');
-  if (!sel) return;
-  const currentVal = sel.value;
+function pdvShowContacts() {
+  const input = document.getElementById('pdv-contact-input');
+  const list = document.getElementById('pdv-contact-list');
+  if (!input || !list) return;
+  const query = input.value.toLowerCase();
   const filtered = state.contacts.filter(c =>
     c.name.toLowerCase().includes(query) || (c.local || '').toLowerCase().includes(query)
   );
-  sel.innerHTML = `<option value="" disabled>Selecione a cliente</option>` +
-    filtered.map(c => `<option value="${c.id}" ${c.id === currentVal ? 'selected' : ''}>${c.name}${c.local ? ' (' + c.local + ')' : ''}</option>`).join('');
-  if (filtered.length === 1) {
-    sel.value = filtered[0].id;
-    state._pdvSelectedContact = filtered[0].id;
-    pdvUpdatePhone();
-  }
+  list.style.display = 'block';
+  list.innerHTML = filtered.length === 0
+    ? '<div class="pdv-contact-option" style="color:#888">Nenhum resultado</div>'
+    : filtered.map(c => `<div class="pdv-contact-option" onmousedown="pdvSelectContact('${c.id}')">${c.name}${c.local ? ' <span style="color:#888">(' + c.local + ')</span>' : ''}</div>`).join('');
+}
+
+function pdvSelectContact(id) {
+  const c = state.contacts.find(c => c.id === id);
+  if (!c) return;
+  state._pdvSelectedContact = id;
+  const input = document.getElementById('pdv-contact-input');
+  const list = document.getElementById('pdv-contact-list');
+  if (input) input.value = c.name + (c.local ? ' (' + c.local + ')' : '');
+  if (list) list.style.display = 'none';
+  pdvUpdatePhone();
+}
+
+function pdvHideContacts() {
+  setTimeout(() => {
+    const list = document.getElementById('pdv-contact-list');
+    if (list) list.style.display = 'none';
+  }, 200);
 }
 
 function pdvOpenEditContact() {
-  const sel = document.getElementById('pdv-contact');
-  if (sel && sel.value) state._pdvEditId = sel.value;
-  else if (state._pdvSelectedContact) state._pdvEditId = state._pdvSelectedContact;
+  if (state._pdvSelectedContact) state._pdvEditId = state._pdvSelectedContact;
   state.modal = 'pdvEditContact';
   render();
 }
@@ -952,7 +964,7 @@ async function pdvSaveEditContact() {
 }
 
 function pdvGoReview() {
-  const contactId = document.getElementById('pdv-contact')?.value;
+  const contactId = state._pdvSelectedContact;
   const parcelsRaw = document.getElementById('pdv-parcels')?.value;
   const dayRaw = document.getElementById('pdv-day')?.value;
   const isDayAberto = dayRaw === 'aberto';
@@ -1189,7 +1201,6 @@ function renderPDV() {
   // ── STEP: PAYMENT ──
   if (state.pdvStep === 'payment') {
     const selId = state._pdvSelectedContact || '';
-    const opts = `<option value="" disabled ${!selId ? 'selected' : ''}>Selecione a cliente</option>` + state.contacts.map(c => `<option value="${c.id}" ${c.id === selId ? 'selected' : ''}>${c.name}${c.local ? ' (' + c.local + ')' : ''}</option>`).join('');
     const selContact = selId ? state.contacts.find(c => c.id === selId) : null;
     return `<div class="pdv-overlay">
       ${topbar('pdvPaymentBack()', 'Pagamento')}
@@ -1211,8 +1222,10 @@ function renderPDV() {
         </div>
         <div class="pdv-form-group">
           <label class="pdv-form-label">Cliente *</label>
-          <input class="form-input" id="pdv-contact-search" placeholder="Buscar cliente..." oninput="pdvFilterContacts()" style="margin-bottom:8px" />
-          <select class="form-input ${!selId ? 'pdv-field-required' : ''}" id="pdv-contact" onchange="state._pdvSelectedContact=this.value;pdvUpdatePhone();render()">${opts}</select>
+          <div class="pdv-autocomplete">
+            <input class="form-input" id="pdv-contact-input" placeholder="Digite o nome da cliente" value="${selContact ? selContact.name + (selContact.local ? ' (' + selContact.local + ')' : '') : ''}" onfocus="pdvShowContacts()" oninput="pdvShowContacts()" onblur="pdvHideContacts()" autocomplete="off" />
+            <div class="pdv-contact-list" id="pdv-contact-list" style="display:none"></div>
+          </div>
           ${selContact ? `<div id="pdv-phone-display" style="font-size:13px;color:#25D366;padding:6px 0">+${selContact.phone}</div>` : ''}
           <div style="display:flex;gap:16px">
             <button class="pdv-new-client" onclick="state.modal='pdvNewContact';render()">+ Nova cliente</button>
