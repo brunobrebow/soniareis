@@ -907,6 +907,23 @@ function pdvUpdatePhone() {
   }
 }
 
+function pdvFilterContacts() {
+  const query = (document.getElementById('pdv-contact-search')?.value || '').toLowerCase();
+  const sel = document.getElementById('pdv-contact');
+  if (!sel) return;
+  const currentVal = sel.value;
+  const filtered = state.contacts.filter(c =>
+    c.name.toLowerCase().includes(query) || (c.local || '').toLowerCase().includes(query)
+  );
+  sel.innerHTML = `<option value="" disabled>Selecione a cliente</option>` +
+    filtered.map(c => `<option value="${c.id}" ${c.id === currentVal ? 'selected' : ''}>${c.name}${c.local ? ' (' + c.local + ')' : ''}</option>`).join('');
+  if (filtered.length === 1) {
+    sel.value = filtered[0].id;
+    state._pdvSelectedContact = filtered[0].id;
+    pdvUpdatePhone();
+  }
+}
+
 function pdvOpenEditContact() {
   const sel = document.getElementById('pdv-contact');
   if (sel && sel.value) state._pdvEditId = sel.value;
@@ -1194,6 +1211,7 @@ function renderPDV() {
         </div>
         <div class="pdv-form-group">
           <label class="pdv-form-label">Cliente *</label>
+          <input class="form-input" id="pdv-contact-search" placeholder="Buscar cliente..." oninput="pdvFilterContacts()" style="margin-bottom:8px" />
           <select class="form-input ${!selId ? 'pdv-field-required' : ''}" id="pdv-contact" onchange="state._pdvSelectedContact=this.value;pdvUpdatePhone();render()">${opts}</select>
           ${selContact ? `<div id="pdv-phone-display" style="font-size:13px;color:#25D366;padding:6px 0">+${selContact.phone}</div>` : ''}
           <div style="display:flex;gap:16px">
