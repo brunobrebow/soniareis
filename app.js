@@ -3285,7 +3285,7 @@ function renderModal() {
     </div>`;
   }
 
-  if (state.modal === 'adiar' && state.modalExtra) {
+  if (state.modal === 'adiar' && state._adiarCharges) {
     return `<div class="modal-overlay" onclick="closeModal()">
       <div class="modal-sheet" onclick="event.stopPropagation()">
         <div class="modal-title">Adiar cobrança</div>
