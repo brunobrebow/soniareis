@@ -2534,10 +2534,13 @@ function renderFinanceiro() {
     });
     Object.values(paymentGroups).forEach(g => {
       const descs = [...new Set(g.sales.map(s => s.description))];
+      // Get the payment date from the group
+      const firstPaidAt = g.payments.find(p => p.paid_at)?.paid_at;
+      const dateLabel = firstPaidAt ? new Date(firstPaidAt).toLocaleDateString('pt-BR') : `${g.payments.length} pagamento${g.payments.length > 1 ? 's' : ''}`;
       transactions.push({
         name: g.contact?.name || '—',
         desc: descs.length <= 2 ? descs.join(', ') : descs.slice(0, 2).join(', ') + ` +${descs.length - 2}`,
-        date: `${g.payments.length} pagamento${g.payments.length > 1 ? 's' : ''}`,
+        date: dateLabel,
         value: g.total,
         color: '#3B6D11',
         prefix: '+',
@@ -2545,7 +2548,12 @@ function renderFinanceiro() {
         paymentGroup: g.payments
       });
     });
-    transactions.sort((a, b) => b.value - a.value);
+    transactions.sort((a, b) => {
+      const da = a.paymentGroup?.find(p => p.paid_at)?.paid_at;
+      const db = b.paymentGroup?.find(p => p.paid_at)?.paid_at;
+      if (da && db) return new Date(db) - new Date(da);
+      return b.value - a.value;
+    });
   } else if (sel === 'a_receber') {
     listTitle = 'Parcelas a receber';
     aReceberItems.sort((a, b) => a.parcel.date - b.parcel.date);
@@ -2818,7 +2826,8 @@ function renderDetail(contactId) {
                         <span class="badge ${p.paid ? 'badge-ok' : 'badge-due'}">${p.paid ? 'Pago' : 'R$ ' + p.remaining}</span>
                         ${p.paid ? `<button style="background:none;border:none;cursor:pointer;font-size:11px;color:#A32D2D;padding:0" onclick="undoTransactionParcel('${g.ids.join(',')}',${p.index})">Desfazer</button>` : ''}
                       </div>
-                    </div>`).join('')}
+                    </div>
+                    ${p.paid && p.paidAt ? `<div style="font-size:11px;color:#3B6D11;padding:0 0 6px 2px;margin-top:-2px">✓ Pago R$ ${p.paidAmount} em ${new Date(p.paidAt).toLocaleDateString('pt-BR')}</div>` : ''}`).join('')}
                 </div>
               </div>`;
           }).join('');
@@ -3320,10 +3329,13 @@ function renderModal() {
             <div style="display:flex;justify-content:space-between;padding:6px 0"><span>Pagamento</span><span style="color:#1a1a1a">${sale.payment_method === 'pix' ? 'Pix' : 'Cartão'}</span></div>
           </div>
           <div style="margin:8px 0;font-size:13px">
-            ${parcels.map(p => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f5f5f5">
-              <span>Parc. ${p.index+1}</span>
-              <span>${p.dateStr}</span>
-              <span class="badge ${p.paid ? 'badge-ok' : 'badge-due'}">${p.paid ? 'Pago' : 'R$ ' + p.remaining}</span>
+            ${parcels.map(p => `<div style="padding:6px 0;border-bottom:1px solid #f5f5f5">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span>Parc. ${p.index+1}</span>
+                <span>${p.dateStr}</span>
+                <span class="badge ${p.paid ? 'badge-ok' : 'badge-due'}">${p.paid ? 'Pago' : 'R$ ' + p.remaining}</span>
+              </div>
+              ${p.paid && p.paidAt ? `<div style="font-size:11px;color:#3B6D11;margin-top:2px">✓ R$ ${p.paidAmount} em ${new Date(p.paidAt).toLocaleDateString('pt-BR')}</div>` : ''}
             </div>`).join('')}
           </div>
           <button class="btn-cancel" onclick="closeModal()">Fechar</button>
