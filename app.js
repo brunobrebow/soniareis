@@ -1982,15 +1982,12 @@ function renderHome() {
     return d.getMonth() === mesAtual && d.getFullYear() === anoAtual;
   }).reduce((a, s) => a + s.total, 0);
 
-  // Monthly received (paid this month)
+  // Monthly received (paid this month, includes partials)
   const recebidoMes = state.payments.filter(p => {
-    if (!p.paid || !p.paid_at) return false;
+    if ((p.paid_amount || 0) <= 0 || !p.paid_at) return false;
     const d = new Date(p.paid_at);
     return d.getMonth() === mesAtual && d.getFullYear() === anoAtual;
-  }).reduce((a, p) => {
-    const sale = state.sales.find(s => s.id === p.sale_id);
-    return a + (p.paid_amount || sale?.parcel_value || 0);
-  }, 0);
+  }).reduce((a, p) => a + (p.paid_amount || 0), 0);
 
   // Monthly pending (unpaid parcels due this month)
   const mesCharges = getDueCharges('mes');
@@ -2075,13 +2072,10 @@ function renderHome() {
         });
         const numVendas = txKeys.size;
         const recebidoHoje = state.payments.filter(p => {
-          if (!p.paid || !p.paid_at) return false;
+          if ((p.paid_amount || 0) <= 0 || !p.paid_at) return false;
           const d = new Date(p.paid_at);
           return d.getDate() === hoje.getDate() && d.getMonth() === hoje.getMonth() && d.getFullYear() === hoje.getFullYear();
-        }).reduce((a, p) => {
-          const sale = state.sales.find(s => s.id === p.sale_id);
-          return a + (p.paid_amount || sale?.parcel_value || 0);
-        }, 0);
+        }).reduce((a, p) => a + (p.paid_amount || 0), 0);
 
         return `
           <div class="home-day-summary" onclick="state.modal='vendasDia';render()">
@@ -2478,12 +2472,9 @@ function renderFinanceiro() {
     return d.getMonth() === filterMonth && d.getFullYear() === filterYear;
   };
 
-  // Recebido no período
-  const paidInPeriod = state.payments.filter(p => p.paid && isInPeriod(p.paid_at));
-  const recebido = paidInPeriod.reduce((a, p) => {
-    const sale = state.sales.find(s => s.id === p.sale_id);
-    return a + (p.paid_amount || sale?.parcel_value || 0);
-  }, 0);
+  // Recebido no período (inclui pagamentos parciais)
+  const paidInPeriod = state.payments.filter(p => (p.paid_amount || 0) > 0 && isInPeriod(p.paid_at));
+  const recebido = paidInPeriod.reduce((a, p) => a + (p.paid_amount || 0), 0);
 
   // A receber no período (parcelas com vencimento no período, não pagas)
   const aReceberItems = [];
@@ -2526,7 +2517,7 @@ function renderFinanceiro() {
       if (!paymentGroups[groupKey]) {
         paymentGroups[groupKey] = { contact, total: 0, payments: [], sales: [] };
       }
-      paymentGroups[groupKey].total += Math.round(p.paid_amount || getParcelAmount(sale, p.parcel_index));
+      paymentGroups[groupKey].total += Math.round(p.paid_amount || 0);
       paymentGroups[groupKey].payments.push(p);
       if (!paymentGroups[groupKey].sales.find(s => s.id === sale.id)) {
         paymentGroups[groupKey].sales.push(sale);
@@ -2660,11 +2651,8 @@ function renderDetail(contactId) {
   const totalSpent = cSales.reduce((a, s) => a + s.total, 0);
   const totalPaid = state.payments.filter(p => {
     const sale = cSales.find(s => s.id === p.sale_id);
-    return sale && p.paid;
-  }).reduce((a, p) => {
-    const sale = cSales.find(s => s.id === p.sale_id);
-    return a + (p.paid_amount || sale?.parcel_value || 0);
-  }, 0);
+    return sale && (p.paid_amount || 0) > 0;
+  }).reduce((a, p) => a + (p.paid_amount || 0), 0);
   const pendingParcels = (() => {
     // Group sales by transaction (same minute)
     const txGroups = {};
@@ -2824,10 +2812,10 @@ function renderDetail(contactId) {
                       <span class="parcel-date">${p.dateStr}</span>
                       <div class="parcel-status">
                         <span class="badge ${p.paid ? 'badge-ok' : 'badge-due'}">${p.paid ? 'Pago' : 'R$ ' + p.remaining}</span>
-                        ${p.paid ? `<button style="background:none;border:none;cursor:pointer;font-size:11px;color:#A32D2D;padding:0" onclick="undoTransactionParcel('${g.ids.join(',')}',${p.index})">Desfazer</button>` : ''}
+                        ${p.paid || p.paidAmount > 0 ? `<button style="background:none;border:none;cursor:pointer;font-size:11px;color:#A32D2D;padding:0" onclick="undoTransactionParcel('${g.ids.join(',')}',${p.index})">Desfazer</button>` : ''}
                       </div>
                     </div>
-                    ${p.paid && p.paidAt ? `<div style="font-size:11px;color:#3B6D11;padding:0 0 6px 2px;margin-top:-2px">✓ Pago R$ ${p.paidAmount} em ${new Date(p.paidAt).toLocaleDateString('pt-BR')}</div>` : ''}`).join('')}
+                    ${p.paid && p.paidAt ? `<div style="font-size:11px;color:#3B6D11;padding:0 0 6px 2px;margin-top:-2px">✓ Pago R$ ${p.paidAmount} em ${new Date(p.paidAt).toLocaleDateString('pt-BR')}</div>` : (p.paidAmount > 0 ? `<div style="font-size:11px;color:#C68A00;padding:0 0 6px 2px;margin-top:-2px">◐ Parcial: pago R$ ${p.paidAmount}${p.paidAt ? ' em ' + new Date(p.paidAt).toLocaleDateString('pt-BR') : ''} · falta R$ ${p.remaining}</div>` : '')}`).join('')}
                 </div>
               </div>`;
           }).join('');
