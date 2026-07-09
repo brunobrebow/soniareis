@@ -2546,32 +2546,48 @@ function renderFinanceiro() {
       return b.value - a.value;
     });
   } else if (sel === 'a_receber') {
-    listTitle = 'Parcelas a receber';
-    aReceberItems.sort((a, b) => a.parcel.date - b.parcel.date);
+    listTitle = 'A receber por cliente';
+    const byContact = {};
     aReceberItems.forEach(({ sale, parcel, contact }) => {
+      const key = sale.contact_id;
+      if (!byContact[key]) byContact[key] = { contact, total: 0, count: 0, sale, parcels: [] };
+      byContact[key].total += parcel.remaining;
+      byContact[key].count += 1;
+      byContact[key].parcels.push({ sale, parcel });
+    });
+    Object.values(byContact).forEach(g => {
       transactions.push({
-        name: contact?.name?.split(' ').slice(0, 2).join(' ') || '—',
-        desc: `${sale.description} · Parc. ${parcel.index + 1}/${sale.parcels}`,
-        date: parcel.dateStr,
-        value: parcel.remaining,
+        name: g.contact?.name?.split(' ').slice(0, 2).join(' ') || '—',
+        desc: `${g.count} parcela${g.count !== 1 ? 's' : ''} pendente${g.count !== 1 ? 's' : ''}`,
+        date: '',
+        value: g.total,
         color: '#993556',
         prefix: '',
-        sale, parcel, contact, actionable: true
+        sale: g.sale, contact: g.contact
       });
     });
+    transactions.sort((a, b) => b.value - a.value);
   } else if (sel === 'atrasado') {
-    listTitle = 'Parcelas em atraso';
+    listTitle = 'Em atraso por cliente';
+    const byContact = {};
     atrasadoItems.forEach(({ sale, parcel, contact }) => {
+      const key = sale.contact_id;
+      if (!byContact[key]) byContact[key] = { contact, total: 0, count: 0, sale };
+      byContact[key].total += parcel.remaining;
+      byContact[key].count += 1;
+    });
+    Object.values(byContact).forEach(g => {
       transactions.push({
-        name: contact?.name?.split(' ').slice(0, 2).join(' ') || '—',
-        desc: `${sale.description} · Parc. ${parcel.index + 1}/${sale.parcels}`,
-        date: parcel.dateStr,
-        value: parcel.remaining,
+        name: g.contact?.name?.split(' ').slice(0, 2).join(' ') || '—',
+        desc: `${g.count} parcela${g.count !== 1 ? 's' : ''} em atraso`,
+        date: '',
+        value: g.total,
         color: '#A32D2D',
         prefix: '',
-        sale, parcel, contact, actionable: true
+        sale: g.sale, contact: g.contact
       });
     });
+    transactions.sort((a, b) => b.value - a.value);
   }
 
   return `
@@ -2621,9 +2637,12 @@ function renderFinanceiro() {
               actionHtml = '<span style="font-size:11px;color:#aaa">💳</span>';
             }
           }
+          const clickAction = t.contact && (sel === 'a_receber' || sel === 'atrasado')
+            ? `onclick="state.detail='${t.contact.id}';render()" style="cursor:pointer"`
+            : (t.sale ? `onclick="state.modal='finDetail';state.modalExtra='${t.sale.id}';render()" style="cursor:pointer"` : '');
           return `
             <div class="fin-transaction">
-              <div class="fin-tx-left" ${t.sale ? 'onclick="state.modal=\'finDetail\';state.modalExtra=\'' + t.sale.id + '\';render()" style="cursor:pointer"' : ''}>
+              <div class="fin-tx-left" ${clickAction}>
                 <div class="fin-tx-name">${t.name}</div>
                 <div class="fin-tx-desc">${t.desc}</div>
               </div>
