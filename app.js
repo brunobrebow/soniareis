@@ -969,7 +969,7 @@ function pdvGoReview() {
   const dayRaw = document.getElementById('pdv-day')?.value;
   const isDayAberto = dayRaw === 'aberto';
   const day = isDayAberto ? 30 : parseInt(dayRaw);
-  const startMonthOffset = parseInt(document.querySelector('input[name="pdv-startmonth"]:checked')?.value || '1');
+  const startMonthOffset = parseInt(document.getElementById('pdv-startmonth')?.value || '1');
   const method = document.querySelector('input[name="pdv-method"]:checked')?.value || 'pix';
   const totalDiscount = parseFloat(document.getElementById('pdv-total-discount')?.value) || 0;
   if (!contactId) { showToast('Selecione a cliente', '#A32D2D'); return; }
@@ -1251,13 +1251,20 @@ function renderPDV() {
           </div>
         </div>
         <div class="pdv-form-group">
-          <label class="pdv-form-label">Primeira parcela</label>
-          <div class="pdv-toggle-row">
-            <input type="radio" name="pdv-startmonth" id="pdv-sm-current" value="0" class="pdv-toggle-input" />
-            <label for="pdv-sm-current" class="pdv-toggle-btn">Este mês</label>
-            <input type="radio" name="pdv-startmonth" id="pdv-sm-next" value="1" checked class="pdv-toggle-input" />
-            <label for="pdv-sm-next" class="pdv-toggle-btn">Próximo mês</label>
-          </div>
+          <label class="pdv-form-label">Mês da primeira parcela</label>
+          <select class="form-input" id="pdv-startmonth">
+            ${(() => {
+              const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+              const now = new Date();
+              let html = '';
+              for (let i = 1; i <= 12; i++) {
+                const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+                const label = `${meses[d.getMonth()]} ${d.getFullYear()}`;
+                html += `<option value="${i}" ${i === 1 ? 'selected' : ''}>${label}</option>`;
+              }
+              return html;
+            })()}
+          </select>
         </div>
         <div class="pdv-form-group">
           <label class="pdv-form-label">Desconto na venda (R$)</label>
@@ -1367,7 +1374,12 @@ function renderPDV() {
             </div>
             <div class="pdv-review-info-row">
               <span class="pdv-review-info-label">Primeira parcela</span>
-              <span class="pdv-review-info-value">${rv.startMonthOffset === 0 ? 'Este mês' : 'Próximo mês'}</span>
+              <span class="pdv-review-info-value">${(() => {
+                const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+                const now = new Date();
+                const d = new Date(now.getFullYear(), now.getMonth() + (rv.startMonthOffset || 1), 1);
+                return `${meses[d.getMonth()]} ${d.getFullYear()}`;
+              })()}</span>
             </div>
             <div class="pdv-review-info-row">
               <span class="pdv-review-info-label">Pagamento</span>
@@ -2584,7 +2596,7 @@ function renderFinanceiro() {
         value: g.total,
         color: '#A32D2D',
         prefix: '',
-        sale: g.sale, contact: g.contact
+        sale: g.sale, contact: g.contact, canAdiar: true
       });
     });
     transactions.sort((a, b) => b.value - a.value);
@@ -2627,6 +2639,8 @@ function renderFinanceiro() {
             // Recebido: show undo button
             const pids = t.paymentGroup.map(p => p.id).join(',');
             actionHtml = '<button class="fin-tx-undo" onclick="undoPayments(\'' + pids + '\')">Desfazer</button>';
+          } else if (t.canAdiar && t.contact) {
+            actionHtml = '<button class="fin-tx-undo" onclick="event.stopPropagation();openAdiarForContact(\'' + t.contact.id + '\')">Adiar</button>';
           } else if (t.actionable && t.contact && t.sale) {
             const isCard = t.sale.payment_method === 'cartao';
             if (!isCard) {
@@ -2936,10 +2950,20 @@ function renderModal() {
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Primeira parcela</label>
+            <label class="form-label">Mês da primeira parcela</label>
             <select class="form-input" id="et-offset">
-              <option value="0" ${first.start_month_offset === 0 ? 'selected' : ''}>Mês da venda</option>
-              <option value="1" ${first.start_month_offset !== 0 ? 'selected' : ''}>Mês seguinte</option>
+              ${(() => {
+                const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+                const created = new Date(first.created_at);
+                const curOffset = first.start_month_offset !== undefined && first.start_month_offset !== null ? first.start_month_offset : 1;
+                let html = '';
+                for (let i = 0; i <= 12; i++) {
+                  const d = new Date(created.getFullYear(), created.getMonth() + i, 1);
+                  const label = `${meses[d.getMonth()]} ${d.getFullYear()}`;
+                  html += `<option value="${i}" ${i === curOffset ? 'selected' : ''}>${label}${i === 0 ? ' (mês da venda)' : ''}</option>`;
+                }
+                return html;
+              })()}
             </select>
           </div>
           <button class="btn-primary" onclick="saveEditTransaction()">Salvar alterações</button>
@@ -3308,7 +3332,10 @@ function renderModal() {
         <div class="modal-subtitle">Por quantos dias deseja adiar?</div>
         <div class="form-group">
           <select class="form-input" id="adiar-days">
-            ${Array.from({length:30},(_,i)=>`<option value="${i+1}">${i+1} dia${i>0?'s':''}</option>`).join('')}
+            <option value="5">5 dias</option>
+            <option value="10">10 dias</option>
+            <option value="15">15 dias</option>
+            <option value="30">30 dias</option>
           </select>
         </div>
         <button class="btn-primary" onclick="confirmAdiar()">Confirmar</button>
