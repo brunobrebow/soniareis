@@ -252,6 +252,11 @@ async function saveEditTransaction() {
       const updated = await DB.updateSale(ids[i], { description: desc, total, parcels, parcel_value: parcelValue, start_day: day, start_month_offset: startMonthOffset, payment_method: method });
       const idx = state.sales.findIndex(s => s.id === ids[i]);
       if (idx >= 0) state.sales[idx] = updated;
+
+      // Sync payment rows: create missing ones if parcels increased
+      const existing = state.payments.filter(p => p.sale_id === ids[i]).map(p => p.parcel_index);
+      const created = await DB.ensurePaymentRows(ids[i], parcels, existing);
+      if (created && created.length > 0) state.payments.push(...created);
     }
     closeModal();
     showToast('Venda atualizada!');
@@ -315,30 +320,35 @@ async function confirmFullPayment() {
     // FIFO: pay oldest parcels first
     for (const p of fp.pendingParcels) {
       if (leftover <= 0) break;
-      const payment = state.payments.find(pm => pm.sale_id === p.saleId && pm.parcel_index === p.parcelIndex);
       const sale = state.sales.find(s => s.id === p.saleId);
-      if (!payment || !sale) continue;
+      if (!sale) continue;
+      let payment = state.payments.find(pm => pm.sale_id === p.saleId && pm.parcel_index === p.parcelIndex);
 
       const pAmt = getParcelAmount(sale, p.parcelIndex);
-      const parcelRemaining = Math.round(pAmt - (payment.paid_amount || 0));
+      const parcelRemaining = Math.round(pAmt - (payment?.paid_amount || 0));
       const payAmount = Math.min(leftover, parcelRemaining);
       if (payAmount <= 0) continue;
       leftover -= payAmount;
 
-      const totalPaid = Math.round((payment.paid_amount || 0) + payAmount);
+      const totalPaid = Math.round((payment?.paid_amount || 0) + payAmount);
       const isFullParcel = totalPaid >= pAmt;
 
-      await DB.markPaid(p.saleId, p.parcelIndex, totalPaid, isFullParcel);
-      payment.paid_amount = totalPaid;
-      if (isFullParcel) payment.paid = true;
-      payment.paid_at = payTimestamp;
+      const saved = await DB.markPaid(p.saleId, p.parcelIndex, totalPaid, isFullParcel);
+      // Update or insert local payment object
+      if (payment) {
+        payment.paid_amount = totalPaid;
+        payment.paid = isFullParcel;
+        payment.paid_at = payTimestamp;
+      } else if (saved) {
+        state.payments.push(saved);
+      }
     }
 
     state.modal = null;
     showToast(`R$ ${amount.toLocaleString('pt-BR')} registrado!`);
     render();
   } catch (e) {
-    showToast('Erro ao registrar.', '#A32D2D');
+    showToast('Erro ao registrar. Tente novamente.', '#A32D2D');
     console.error(e);
   }
 }
@@ -442,6 +452,28 @@ async function loadData() {
   state.contacts = contacts;
   state.sales = sales;
   state.payments = payments;
+
+  // Auto-repair: ensure every sale has a payment row for each parcel
+  try {
+    let repaired = false;
+    for (const sale of sales) {
+      const existing = payments.filter(p => p.sale_id === sale.id).map(p => p.parcel_index);
+      const missing = [];
+      for (let i = 0; i < sale.parcels; i++) {
+        if (!existing.includes(i)) missing.push(i);
+      }
+      if (missing.length > 0) {
+        const created = await DB.ensurePaymentRows(sale.id, sale.parcels, existing);
+        if (created && created.length > 0) {
+          state.payments.push(...created);
+          repaired = true;
+        }
+      }
+    }
+    if (repaired) console.log('Registros de pagamento faltantes foram criados.');
+  } catch (e) {
+    console.error('Erro ao reparar pagamentos:', e);
+  }
 }
 
 // ---------- HELPERS ----------

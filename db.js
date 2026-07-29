@@ -110,6 +110,22 @@ const DB = {
     const updates = isFullPayment
       ? { paid: true, paid_at: new Date().toISOString(), paid_amount: amount }
       : { paid: false, paid_at: new Date().toISOString(), paid_amount: amount };
+    // Check if the payment row exists first
+    const { data: existing } = await getClient()
+      .from('payments')
+      .select('id')
+      .eq('sale_id', saleId)
+      .eq('parcel_index', parcelIndex);
+    if (!existing || existing.length === 0) {
+      // Row missing — create it
+      const { data, error } = await getClient()
+        .from('payments')
+        .insert({ sale_id: saleId, parcel_index: parcelIndex, ...updates })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    }
     const { data, error } = await getClient()
       .from('payments')
       .update(updates)
@@ -117,6 +133,22 @@ const DB = {
       .eq('parcel_index', parcelIndex)
       .select()
       .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async ensurePaymentRows(saleId, parcels, existingIndexes) {
+    const missing = [];
+    for (let i = 0; i < parcels; i++) {
+      if (!existingIndexes.includes(i)) {
+        missing.push({ sale_id: saleId, parcel_index: i, paid: false, paid_amount: 0 });
+      }
+    }
+    if (missing.length === 0) return [];
+    const { data, error } = await getClient()
+      .from('payments')
+      .insert(missing)
+      .select();
     if (error) throw error;
     return data;
   },
