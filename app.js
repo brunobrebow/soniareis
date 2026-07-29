@@ -348,8 +348,9 @@ async function confirmFullPayment() {
     showToast(`R$ ${amount.toLocaleString('pt-BR')} registrado!`);
     render();
   } catch (e) {
-    showToast('Erro ao registrar. Tente novamente.', '#A32D2D');
-    console.error(e);
+    const msg = e?.message || e?.hint || e?.details || 'erro desconhecido';
+    showToast('Erro: ' + msg, '#A32D2D');
+    console.error('confirmFullPayment error:', e);
   }
 }
 
@@ -453,24 +454,34 @@ async function loadData() {
   state.sales = sales;
   state.payments = payments;
 
-  // Auto-repair: ensure every sale has a payment row for each parcel
+  // Auto-repair: dedupe + ensure every sale has a payment row for each parcel
   try {
     let repaired = false;
     for (const sale of sales) {
-      const existing = payments.filter(p => p.sale_id === sale.id).map(p => p.parcel_index);
+      const rowsForSale = state.payments.filter(p => p.sale_id === sale.id);
+      // Detect duplicates (same parcel_index appearing more than once)
+      const indexCounts = {};
+      rowsForSale.forEach(p => { indexCounts[p.parcel_index] = (indexCounts[p.parcel_index] || 0) + 1; });
+      const hasDupes = Object.values(indexCounts).some(c => c > 1);
+      if (hasDupes) {
+        await DB.dedupePayments(sale.id);
+        repaired = true;
+      }
+      const existing = Object.keys(indexCounts).map(Number);
       const missing = [];
       for (let i = 0; i < sale.parcels; i++) {
         if (!existing.includes(i)) missing.push(i);
       }
       if (missing.length > 0) {
-        const created = await DB.ensurePaymentRows(sale.id, sale.parcels, existing);
-        if (created && created.length > 0) {
-          state.payments.push(...created);
-          repaired = true;
-        }
+        await DB.ensurePaymentRows(sale.id, sale.parcels, existing);
+        repaired = true;
       }
     }
-    if (repaired) console.log('Registros de pagamento faltantes foram criados.');
+    if (repaired) {
+      // Reload payments to get the clean, correct state
+      state.payments = await DB.getPayments();
+      console.log('Pagamentos reparados.');
+    }
   } catch (e) {
     console.error('Erro ao reparar pagamentos:', e);
   }
