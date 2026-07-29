@@ -2226,9 +2226,10 @@ function renderContatos() {
   Object.entries(txByContact).forEach(([contactId, txs]) => {
     let count = 0;
     Object.values(txs).forEach(sales => {
-      // Check if this transaction has ANY unpaid parcel
+      // Check if this transaction has ANY unpaid parcel — use getSaleParcels
+      // so it works even if payment rows are missing in the DB
       const hasAnyPending = sales.some(s => {
-        return state.payments.some(p => p.sale_id === s.id && !p.paid);
+        return getSaleParcels(s).some(p => !p.paid);
       });
       if (hasAnyPending) count++;
     });
@@ -2727,11 +2728,11 @@ function renderDetail(contactId) {
       if (!txGroups[key]) txGroups[key] = [];
       txGroups[key].push(s);
     });
-    // Count transactions with ANY unpaid parcel
+    // Count transactions with ANY unpaid parcel — use getSaleParcels
     let count = 0;
     Object.values(txGroups).forEach(sales => {
       const hasAnyPending = sales.some(s => {
-        return state.payments.some(p => p.sale_id === s.id && !p.paid);
+        return getSaleParcels(s).some(p => !p.paid);
       });
       if (hasAnyPending) count++;
     });
