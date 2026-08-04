@@ -1012,7 +1012,7 @@ function pdvGoReview() {
   const dayRaw = document.getElementById('pdv-day')?.value;
   const isDayAberto = dayRaw === 'aberto';
   const day = isDayAberto ? 30 : parseInt(dayRaw);
-  const startMonthOffset = parseInt(document.getElementById('pdv-startmonth')?.value || '1');
+  const startMonthOffset = parseInt(document.getElementById('pdv-startmonth')?.value ?? '0');
   const method = document.querySelector('input[name="pdv-method"]:checked')?.value || 'pix';
   const totalDiscount = parseFloat(document.getElementById('pdv-total-discount')?.value) || 0;
   if (!contactId) { showToast('Selecione a cliente', '#A32D2D'); return; }
@@ -1300,10 +1300,10 @@ function renderPDV() {
               const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
               const now = new Date();
               let html = '';
-              for (let i = 1; i <= 12; i++) {
+              for (let i = 0; i <= 12; i++) {
                 const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
                 const label = `${meses[d.getMonth()]} ${d.getFullYear()}`;
-                html += `<option value="${i}" ${i === 1 ? 'selected' : ''}>${label}</option>`;
+                html += `<option value="${i}" ${i === 0 ? 'selected' : ''}>${label}</option>`;
               }
               return html;
             })()}
@@ -1420,7 +1420,7 @@ function renderPDV() {
               <span class="pdv-review-info-value">${(() => {
                 const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
                 const now = new Date();
-                const d = new Date(now.getFullYear(), now.getMonth() + (rv.startMonthOffset || 1), 1);
+                const d = new Date(now.getFullYear(), now.getMonth() + (rv.startMonthOffset ?? 0), 1);
                 return `${meses[d.getMonth()]} ${d.getFullYear()}`;
               })()}</span>
             </div>
