@@ -509,7 +509,18 @@ function getSaleParcels(sale) {
   const paymentsByIndex = {};
   state.payments
     .filter(p => p.sale_id === sale.id)
-    .forEach(p => { paymentsByIndex[p.parcel_index] = p; });
+    .forEach(p => {
+      const existing = paymentsByIndex[p.parcel_index];
+      // If duplicates exist for the same parcel_index, keep the "most paid" one
+      // (paid=true wins, then higher paid_amount) so payments never appear lost
+      if (!existing) {
+        paymentsByIndex[p.parcel_index] = p;
+      } else {
+        const existingScore = (existing.paid ? 1e9 : 0) + (existing.paid_amount || 0);
+        const newScore = (p.paid ? 1e9 : 0) + (p.paid_amount || 0);
+        if (newScore > existingScore) paymentsByIndex[p.parcel_index] = p;
+      }
+    });
 
   // First parcel month based on offset (0 = same month, 1 = next month)
   const created = new Date(sale.created_at);
