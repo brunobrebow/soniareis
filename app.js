@@ -306,6 +306,25 @@ function openFullPayment(contactId) {
   render();
 }
 
+async function cleanAllDuplicates() {
+  if (!confirm('Limpar todas as duplicatas do sistema? Isso mantém o pagamento registrado de cada parcela e remove as linhas repetidas. Seguro.')) return;
+  try {
+    let totalRemoved = 0;
+    for (const sale of state.sales) {
+      const removed = await DB.dedupePayments(sale.id);
+      totalRemoved += removed || 0;
+    }
+    // Reload clean state
+    state.payments = await DB.getPayments();
+    state.modal = null;
+    render();
+    showToast(`${totalRemoved} duplicata${totalRemoved !== 1 ? 's' : ''} removida${totalRemoved !== 1 ? 's' : ''}!`);
+  } catch (e) {
+    showToast('Erro ao limpar: ' + (e?.message || e), '#A32D2D');
+    console.error(e);
+  }
+}
+
 async function diagnosePayments(contactId) {
   try {
     const cSales = state.sales.filter(s => s.contact_id === contactId);
@@ -3337,7 +3356,8 @@ function renderModal() {
     return `<div class="modal-overlay" onclick="closeModal()">
       <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:85vh">
         <div class="modal-title">🔍 Diagnóstico</div>
-        <pre style="font-size:11px;white-space:pre-wrap;word-break:break-word;background:#f5f5f5;padding:12px;border-radius:8px;max-height:60vh;overflow-y:auto;font-family:monospace">${(state._diagnosisText||'').replace(/</g,'&lt;')}</pre>
+        <pre style="font-size:11px;white-space:pre-wrap;word-break:break-word;background:#f5f5f5;padding:12px;border-radius:8px;max-height:50vh;overflow-y:auto;font-family:monospace">${(state._diagnosisText||'').replace(/</g,'&lt;')}</pre>
+        <button class="btn-primary" onclick="cleanAllDuplicates()">🧹 Limpar todas as duplicatas do sistema</button>
         <button class="btn-cancel" onclick="closeModal()">Fechar</button>
       </div>
     </div>`;
