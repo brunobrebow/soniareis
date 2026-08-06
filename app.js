@@ -315,6 +315,8 @@ async function confirmFullPayment() {
   const amount = Math.min(Math.round(val), fp.totalPending);
   const payTimestamp = new Date().toISOString();
   let leftover = amount;
+  let appliedCount = 0;
+  let appliedTotal = 0;
 
   try {
     // FIFO: pay oldest parcels first
@@ -334,6 +336,8 @@ async function confirmFullPayment() {
       const isFullParcel = totalPaid >= pAmt;
 
       const saved = await DB.markPaid(p.saleId, p.parcelIndex, totalPaid, isFullParcel);
+      appliedCount++;
+      appliedTotal += payAmount;
       // Update or insert local payment object
       if (payment) {
         payment.paid_amount = totalPaid;
@@ -345,7 +349,11 @@ async function confirmFullPayment() {
     }
 
     state.modal = null;
-    showToast(`R$ ${amount.toLocaleString('pt-BR')} registrado!`);
+    if (appliedCount === 0) {
+      showToast('Nada foi aplicado — parcelas já quitadas?', '#C68A00');
+    } else {
+      showToast(`R$ ${appliedTotal.toLocaleString('pt-BR')} registrado em ${appliedCount} parcela${appliedCount>1?'s':''}!`);
+    }
     render();
   } catch (e) {
     const msg = e?.message || e?.hint || e?.details || 'erro desconhecido';
