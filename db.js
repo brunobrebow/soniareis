@@ -107,41 +107,29 @@ const DB = {
   },
 
   async markPaid(saleId, parcelIndex, amount, isFullPayment) {
-    const updates = {
+    const newRow = {
+      sale_id: saleId,
+      parcel_index: parcelIndex,
       paid: !!isFullPayment,
       paid_at: new Date().toISOString(),
       paid_amount: amount
     };
-    // Find existing row
-    const { data: existing, error: selErr } = await getClient()
+    // Strategy: delete any existing rows for this parcel, then insert one clean row.
+    // This avoids UPDATE permission issues and eliminates duplicates atomically.
+    const { error: delErr } = await getClient()
       .from('payments')
-      .select('id')
+      .delete()
       .eq('sale_id', saleId)
       .eq('parcel_index', parcelIndex);
-    if (selErr) throw selErr;
+    if (delErr) throw new Error('Não foi possível gravar (delete bloqueado): ' + delErr.message);
 
-    let resultRow = null;
-    if (!existing || existing.length === 0) {
-      // Row missing — create it
-      const { data, error } = await getClient()
-        .from('payments')
-        .insert({ sale_id: saleId, parcel_index: parcelIndex, ...updates })
-        .select();
-      if (error) throw error;
-      resultRow = data && data[0];
-    } else {
-      // Update ALL rows matching this sale+parcel (handles duplicates)
-      const { data, error } = await getClient()
-        .from('payments')
-        .update(updates)
-        .eq('sale_id', saleId)
-        .eq('parcel_index', parcelIndex)
-        .select();
-      if (error) throw error;
-      resultRow = data && data[0];
-    }
+    const { data: inserted, error: insErr } = await getClient()
+      .from('payments')
+      .insert(newRow)
+      .select();
+    if (insErr) throw new Error('Não foi possível gravar (insert bloqueado): ' + insErr.message);
 
-    // VERIFY the write persisted by reading it back
+    // Verify it actually persisted
     const { data: check, error: checkErr } = await getClient()
       .from('payments')
       .select('*')
@@ -149,13 +137,13 @@ const DB = {
       .eq('parcel_index', parcelIndex);
     if (checkErr) throw checkErr;
     if (!check || check.length === 0) {
-      throw new Error('O pagamento não foi salvo no banco (verifique as permissões RLS da tabela payments).');
+      throw new Error('O pagamento não persistiu no banco. Verifique as permissões (RLS) da tabela payments no Supabase.');
     }
-    const savedRow = check[0];
-    if (Math.round(savedRow.paid_amount || 0) !== Math.round(amount)) {
-      throw new Error(`Falha ao gravar: o banco registrou R$ ${savedRow.paid_amount || 0} em vez de R$ ${amount}. Verifique as permissões de escrita (RLS UPDATE) da tabela payments.`);
+    const saved = check[0];
+    if (Math.round(saved.paid_amount || 0) !== Math.round(amount)) {
+      throw new Error(`Gravou R$ ${saved.paid_amount} em vez de R$ ${amount}. Verifique permissões de escrita no Supabase.`);
     }
-    return savedRow;
+    return saved;
   },
 
   async getPaymentsForSale(saleId) {
@@ -240,10 +228,25 @@ const DB = {
       .from('payments')
       .update({ paid: false, paid_at: null, paid_amount: 0 })
       .eq('id', paymentId)
-      .select()
-      .single();
+      .select();
     if (error) throw error;
-    return data;
+    return data && data[0];
+  },
+
+  async undoPaymentByParcel(saleId, parcelIndex) {
+    // Delete all rows for this parcel and insert one clean unpaid row
+    const { error: delErr } = await getClient()
+      .from('payments')
+      .delete()
+      .eq('sale_id', saleId)
+      .eq('parcel_index', parcelIndex);
+    if (delErr) throw delErr;
+    const { data, error } = await getClient()
+      .from('payments')
+      .insert({ sale_id: saleId, parcel_index: parcelIndex, paid: false, paid_amount: 0 })
+      .select();
+    if (error) throw error;
+    return data && data[0];
   },
 
   async deleteSale(saleId) {

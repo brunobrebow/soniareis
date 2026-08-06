@@ -373,15 +373,10 @@ async function confirmFullPayment() {
       const saved = await DB.markPaid(p.saleId, p.parcelIndex, totalPaid, isFullParcel);
       appliedCount++;
       appliedTotal += payAmount;
-      // Update or insert local payment object
-      if (payment) {
-        payment.paid_amount = totalPaid;
-        payment.paid = isFullParcel;
-        payment.paid_at = payTimestamp;
-      } else if (saved) {
-        state.payments.push(saved);
-      }
     }
+
+    // Reload payments from DB so local state exactly matches what persisted
+    state.payments = await DB.getPayments();
 
     state.modal = null;
     if (appliedCount === 0) {
@@ -1954,18 +1949,14 @@ async function undoTransactionParcel(saleIdsStr, parcelIndex) {
   const saleIds = saleIdsStr.split(',');
   try {
     for (const saleId of saleIds) {
-      const pm = state.payments.find(p => p.sale_id === saleId && p.parcel_index === parcelIndex);
-      if (pm && pm.paid) {
-        await DB.undoPayment(pm.id);
-        pm.paid = false;
-        pm.paid_at = null;
-        pm.paid_amount = 0;
-      }
+      await DB.undoPaymentByParcel(saleId, parcelIndex);
     }
+    // Reload to guarantee local state matches DB
+    state.payments = await DB.getPayments();
     showToast('Parcela desfeita!');
     render();
   } catch (e) {
-    showToast('Erro ao desfazer.', '#A32D2D');
+    showToast('Erro ao desfazer: ' + (e?.message || e), '#A32D2D');
     console.error(e);
   }
 }
