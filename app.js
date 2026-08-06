@@ -2208,22 +2208,22 @@ function renderHome() {
         }).reduce((a, p) => a + (p.paid_amount || 0), 0);
 
         return `
-          <div class="home-day-summary" onclick="state.modal='vendasDia';render()">
+          <div class="home-day-summary">
             <div class="home-day-stats">
-              <div class="home-day-stat">
+              <div class="home-day-stat" onclick="state.modal='vendasDia';render()" style="cursor:pointer">
                 <div class="home-day-stat-num">${numVendas}</div>
                 <div class="home-day-stat-label">vendas</div>
               </div>
-              <div class="home-day-stat">
+              <div class="home-day-stat" onclick="state.modal='vendasDia';render()" style="cursor:pointer">
                 <div class="home-day-stat-num" style="color:#3B6D11">R$ ${totalHoje.toLocaleString('pt-BR')}</div>
                 <div class="home-day-stat-label">vendido</div>
               </div>
-              <div class="home-day-stat">
+              <div class="home-day-stat" onclick="state.modal='recebidoDia';render()" style="cursor:pointer">
                 <div class="home-day-stat-num" style="color:#3B6D11">R$ ${recebidoHoje.toLocaleString('pt-BR')}</div>
                 <div class="home-day-stat-label">recebido</div>
               </div>
             </div>
-            <div class="home-day-footer">Toque para ver detalhes</div>
+            <div class="home-day-footer">Toque em cada item para ver detalhes</div>
           </div>`;
       })()}
 
@@ -2355,6 +2355,22 @@ function renderContatos() {
     </div>`;
 }
 
+function filterCobrancas(query) {
+  const q = (query || '').toLowerCase().trim();
+  const list = document.getElementById('cobranca-list');
+  if (!list) return;
+  const items = list.querySelectorAll('.charge-item');
+  let visibleCount = 0;
+  items.forEach(item => {
+    const name = item.getAttribute('data-name') || '';
+    const match = name.includes(q);
+    item.style.display = match ? '' : 'none';
+    if (match) visibleCount++;
+  });
+  const empty = document.getElementById('cobranca-empty');
+  if (empty) empty.style.display = (visibleCount === 0 && items.length > 0) ? 'block' : 'none';
+}
+
 function renderCobrancas() {
   const today = new Date();
   const allDueCharges = getDueCharges('mes');
@@ -2397,8 +2413,12 @@ function renderCobrancas() {
         <div class="charge-summary-item"><span class="charge-summary-num" style="color:#A32D2D">${charges.filter(c => c.isPast).length}</span><span class="charge-summary-label">atrasadas</span></div>
         <div class="charge-summary-item"><span class="charge-summary-num" style="color:#993556">R$ ${charges.reduce((a, c) => a + (c.parcel.remaining || c.parcel.amount), 0).toLocaleString('pt-BR')}</span><span class="charge-summary-label">total</span></div>
       </div>
+      <div style="padding:0 16px 12px">
+        <input class="form-input" id="cobranca-search" placeholder="🔍 Buscar cliente..." oninput="filterCobrancas(this.value)" style="font-size:14px" />
+      </div>
     </div>
-    <div class="screen-scroll-list">
+    <div class="screen-scroll-list" id="cobranca-list">
+      <div class="empty-state" id="cobranca-empty" style="display:none">Nenhuma cliente encontrada</div>
       ${groups.length === 0 ? '<div class="empty-state">' + (filter === 'pendente' ? 'Nenhuma cobrança pendente 🎉' : 'Nenhuma cobrança realizada') + '</div>' : ''}
       ${groups.map(g => {
         const ci = getColorIndex(g.contact.id);
@@ -2406,7 +2426,7 @@ function renderCobrancas() {
         const isCard = g.charges[0]?.sale.payment_method === 'cartao';
         const wppUrl = getGroupChargeUrl(g.contact, g.charges);
 
-        return '<div class="charge-item ' + (g.hasLate ? 'charge-item-late' : '') + '">' +
+        return '<div class="charge-item ' + (g.hasLate ? 'charge-item-late' : '') + '" data-name="' + g.contact.name.toLowerCase().replace(/"/g, '') + '">' +
           '<div class="charge-header">' +
             '<div class="avatar" style="width:42px;height:42px;font-size:14px;background:' + COLORS[ci] + ';color:' + TEXT_COLORS[ci] + '">' + getInitials(g.contact.name) + '</div>' +
             '<div style="flex:1">' +
@@ -3339,6 +3359,49 @@ function renderModal() {
           <div style="display:flex;justify-content:space-between;padding:16px 0 4px;font-size:16px;font-weight:600;color:#1a1a1a;border-top:2px solid #1a1a1a;margin-top:4px">
             <span>Total</span>
             <span>R$ ${totalHoje.toLocaleString('pt-BR')}</span>
+          </div>
+        `}
+        <button class="btn-cancel" onclick="closeModal()">Fechar</button>
+      </div>
+    </div>`;
+  }
+
+  if (state.modal === 'recebidoDia') {
+    const today = new Date();
+    const paymentsToday = state.payments.filter(p => {
+      if ((p.paid_amount || 0) <= 0 || !p.paid_at) return false;
+      const d = new Date(p.paid_at);
+      return d.getDate() === today.getDate() && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
+    });
+    const totalRecebido = paymentsToday.reduce((a, p) => a + (p.paid_amount || 0), 0);
+    // Group by contact
+    const byContact = {};
+    paymentsToday.forEach(p => {
+      const sale = state.sales.find(s => s.id === p.sale_id);
+      if (!sale) return;
+      const cId = sale.contact_id;
+      if (!byContact[cId]) byContact[cId] = { contact: getContact(cId), total: 0, items: [] };
+      byContact[cId].total += (p.paid_amount || 0);
+      byContact[cId].items.push({ desc: sale.description, amount: p.paid_amount || 0 });
+    });
+    const groups = Object.values(byContact).sort((a, b) => b.total - a.total);
+    return `<div class="modal-overlay" onclick="closeModal()">
+      <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:85vh">
+        <div class="modal-title">Recebido hoje</div>
+        <div class="modal-subtitle">${groups.length} cliente${groups.length !== 1 ? 's' : ''} · Total: R$ ${totalRecebido.toLocaleString('pt-BR')}</div>
+        ${groups.length === 0 ? '<div style="text-align:center;color:#aaa;padding:24px 0;font-size:14px">Nenhum pagamento recebido hoje.</div>' : `
+          <div style="margin-top:8px">
+            ${groups.map(g => `<div style="padding:12px 0;border-bottom:1px solid #f5f5f5">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <div style="font-size:15px;font-weight:500;color:#1a1a1a">${g.contact?.name || '—'}</div>
+                  <div style="font-size:16px;font-weight:600;color:#3B6D11">R$ ${Math.round(g.total).toLocaleString('pt-BR')}</div>
+                </div>
+                ${g.items.map(it => `<div style="font-size:13px;color:#555;margin-top:4px">• ${it.desc} — R$ ${Math.round(it.amount).toLocaleString('pt-BR')}</div>`).join('')}
+              </div>`).join('')}
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:16px 0 4px;font-size:16px;font-weight:600;color:#1a1a1a;border-top:2px solid #1a1a1a;margin-top:4px">
+            <span>Total recebido</span>
+            <span style="color:#3B6D11">R$ ${Math.round(totalRecebido).toLocaleString('pt-BR')}</span>
           </div>
         `}
         <button class="btn-cancel" onclick="closeModal()">Fechar</button>
