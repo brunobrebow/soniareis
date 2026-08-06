@@ -366,30 +366,53 @@ async function confirmFullPayment() {
   const fp = state._fullPayment;
   if (!fp) return;
 
-  const amount = Math.min(Math.round(val), fp.totalPending);
   const payTimestamp = new Date().toISOString();
-  let leftover = amount;
   let appliedCount = 0;
   let appliedTotal = 0;
 
   try {
-    // FIFO: pay oldest parcels first
-    for (const p of fp.pendingParcels) {
+    // Reload fresh from DB first, so we distribute over the TRUE current state
+    state.payments = await DB.getPayments();
+
+    // Rebuild the list of pending parcels FRESH (don't trust the stale snapshot)
+    const cSales = state.sales.filter(s => s.contact_id === fp.contactId);
+    const pendingParcels = [];
+    let totalPending = 0;
+    cSales.forEach(s => {
+      getSaleParcels(s).forEach(p => {
+        if (!p.paid) {
+          const rem = Math.round(p.remaining || p.amount);
+          if (rem > 0) {
+            totalPending += rem;
+            pendingParcels.push({ saleId: s.id, parcelIndex: p.index, remaining: rem, date: p.date });
+          }
+        }
+      });
+    });
+    pendingParcels.sort((a, b) => a.date - b.date);
+
+    const amount = Math.min(Math.round(val), totalPending);
+    let leftover = amount;
+
+    // FIFO: distribute across ALL pending parcels, oldest first
+    for (const p of pendingParcels) {
       if (leftover <= 0) break;
       const sale = state.sales.find(s => s.id === p.saleId);
       if (!sale) continue;
-      let payment = state.payments.find(pm => pm.sale_id === p.saleId && pm.parcel_index === p.parcelIndex);
+      const payment = state.payments.find(pm => pm.sale_id === p.saleId && pm.parcel_index === p.parcelIndex);
 
       const pAmt = getParcelAmount(sale, p.parcelIndex);
-      const parcelRemaining = Math.round(pAmt - (payment?.paid_amount || 0));
+      const alreadyPaid = payment?.paid_amount || 0;
+      const parcelRemaining = Math.round(pAmt - alreadyPaid);
+      if (parcelRemaining <= 0) continue;
+
       const payAmount = Math.min(leftover, parcelRemaining);
-      if (payAmount <= 0) continue;
       leftover -= payAmount;
 
-      const totalPaid = Math.round((payment?.paid_amount || 0) + payAmount);
+      const totalPaid = Math.round(alreadyPaid + payAmount);
       const isFullParcel = totalPaid >= pAmt;
 
-      const saved = await DB.markPaid(p.saleId, p.parcelIndex, totalPaid, isFullParcel);
+      await DB.markPaid(p.saleId, p.parcelIndex, totalPaid, isFullParcel);
       appliedCount++;
       appliedTotal += payAmount;
     }
@@ -401,7 +424,7 @@ async function confirmFullPayment() {
     if (appliedCount === 0) {
       showToast('Nada foi aplicado — parcelas já quitadas?', '#C68A00');
     } else {
-      showToast(`R$ ${appliedTotal.toLocaleString('pt-BR')} registrado em ${appliedCount} parcela${appliedCount>1?'s':''}!`);
+      showToast(`R$ ${appliedTotal.toLocaleString('pt-BR')} distribuído em ${appliedCount} parcela${appliedCount>1?'s':''}!`);
     }
     render();
   } catch (e) {
@@ -757,16 +780,14 @@ async function markPaid(saleId, parcelIndex) {
   try {
     const totalPaid = Math.round((payment.paid_amount || 0) + remaining);
     await DB.markPaid(saleId, parcelIndex, totalPaid, true);
-    payment.paid = true;
-    payment.paid_at = new Date().toISOString();
-    payment.paid_amount = totalPaid;
+    state.payments = await DB.getPayments();
     state.paidModal = null;
     showToast('Pagamento registrado!');
     render();
     setTimeout(lockScroll, 100);
     setTimeout(lockScroll, 500);
   } catch (e) {
-    showToast('Erro ao atualizar. Tente novamente.', '#A32D2D');
+    showToast('Erro ao atualizar: ' + (e?.message || e), '#A32D2D');
     console.error(e);
   }
 }
@@ -785,11 +806,7 @@ async function markPartialPaid(saleId, parcelIndex) {
   const isFullPayment = totalPaid >= pAmt;
   try {
     await DB.markPaid(saleId, parcelIndex, totalPaid, isFullPayment);
-    payment.paid_amount = totalPaid;
-    if (isFullPayment) {
-      payment.paid = true;
-    }
-    payment.paid_at = new Date().toISOString();
+    state.payments = await DB.getPayments();
     state.paidModal = null;
     showToast(`R$ ${amount.toLocaleString('pt-BR')} registrado!`);
 
@@ -1800,10 +1817,8 @@ async function confirmGroupPayment() {
       const isFullPayment = totalPaid >= pAmt2;
 
       await DB.markPaid(p.saleId, p.parcelIndex, totalPaid, isFullPayment);
-      payment.paid_amount = totalPaid;
-      if (isFullPayment) payment.paid = true;
-      payment.paid_at = payTimestamp;
     }
+    state.payments = await DB.getPayments();
 
     const isFullPayment = amount >= gp.totalPending;
     state.modal = null;
@@ -1824,7 +1839,7 @@ async function confirmGroupPayment() {
     setTimeout(lockScroll, 100);
     setTimeout(lockScroll, 500);
   } catch (e) {
-    showToast('Erro ao registrar.', '#A32D2D');
+    showToast('Erro ao registrar: ' + (e?.message || e), '#A32D2D');
     console.error(e);
   }
 }
@@ -1910,15 +1925,13 @@ async function confirmTransactionPaid() {
       const pAmt = getParcelAmount(sale, ref.parcelIndex);
       const totalPaid = Math.round(pAmt);
       await DB.markPaid(ref.saleId, ref.parcelIndex, totalPaid, true);
-      pm.paid = true;
-      pm.paid_amount = totalPaid;
-      pm.paid_at = new Date().toISOString();
     }
+    state.payments = await DB.getPayments();
     state.modal = null;
     showToast('Parcela registrada!');
     render();
   } catch (e) {
-    showToast('Erro ao registrar.', '#A32D2D');
+    showToast('Erro ao registrar: ' + (e?.message || e), '#A32D2D');
     console.error(e);
   }
 }
@@ -1942,10 +1955,8 @@ async function confirmTransactionPartial() {
       const totalPaid = Math.round((pm.paid_amount || 0) + payAmt);
       const isFull = totalPaid >= getParcelAmount(sale, ref.parcelIndex);
       await DB.markPaid(ref.saleId, ref.parcelIndex, totalPaid, isFull);
-      pm.paid_amount = totalPaid;
-      if (isFull) pm.paid = true;
-      pm.paid_at = payTimestamp;
     }
+    state.payments = await DB.getPayments();
     const isFullPayment = amount >= tp.totalAmount;
     state.modal = null;
     showToast(`R$ ${amount.toLocaleString('pt-BR')} registrado!`);
@@ -1958,7 +1969,7 @@ async function confirmTransactionPartial() {
     }
     render();
   } catch (e) {
-    showToast('Erro ao registrar.', '#A32D2D');
+    showToast('Erro ao registrar: ' + (e?.message || e), '#A32D2D');
     console.error(e);
   }
 }
