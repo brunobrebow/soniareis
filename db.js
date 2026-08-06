@@ -158,6 +158,35 @@ const DB = {
     return savedRow;
   },
 
+  async getPaymentsForSale(saleId) {
+    const { data, error } = await getClient()
+      .from('payments')
+      .select('*')
+      .eq('sale_id', saleId)
+      .order('parcel_index');
+    if (error) throw error;
+    return data || [];
+  },
+
+  async testWrite(saleId, parcelIndex) {
+    // Read current, write a test value, read back to verify persistence
+    const { data: before } = await getClient()
+      .from('payments').select('*').eq('sale_id', saleId).eq('parcel_index', parcelIndex);
+    if (!before || before.length === 0) throw new Error('linha não existe no banco');
+    const originalAmount = before[0].paid_amount || 0;
+    const testValue = 1; // write R$1 as test
+    const { error: upErr } = await getClient()
+      .from('payments').update({ paid_amount: testValue }).eq('sale_id', saleId).eq('parcel_index', parcelIndex);
+    if (upErr) throw new Error('UPDATE bloqueado: ' + upErr.message);
+    const { data: after } = await getClient()
+      .from('payments').select('*').eq('sale_id', saleId).eq('parcel_index', parcelIndex);
+    const persisted = after && after[0] && Math.round(after[0].paid_amount) === testValue;
+    // Restore original value
+    await getClient().from('payments').update({ paid_amount: originalAmount }).eq('sale_id', saleId).eq('parcel_index', parcelIndex);
+    if (!persisted) throw new Error('UPDATE não persistiu (RLS ou permissão). Banco ainda mostra ' + (after && after[0] ? after[0].paid_amount : 'nada'));
+    return after[0];
+  },
+
   async ensurePaymentRows(saleId, parcels, existingIndexes) {
     // Re-fetch from DB to get the true current state (avoid duplicates)
     const { data: current, error: e0 } = await getClient()

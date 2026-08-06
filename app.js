@@ -306,6 +306,41 @@ function openFullPayment(contactId) {
   render();
 }
 
+async function diagnosePayments(contactId) {
+  try {
+    const cSales = state.sales.filter(s => s.contact_id === contactId);
+    let report = [];
+    for (const s of cSales) {
+      const rows = await DB.getPaymentsForSale(s.id);
+      report.push(`Venda "${s.description}" (${s.parcels}x, offset=${s.start_month_offset ?? 'null'}):`);
+      const byIdx = {};
+      rows.forEach(r => { byIdx[r.parcel_index] = (byIdx[r.parcel_index]||0)+1; });
+      report.push(`  ${rows.length} linhas. ${rows.map(r=>`[i${r.parcel_index}:paid=${r.paid},amt=${r.paid_amount}]`).join(' ')}`);
+      const dupes = Object.entries(byIdx).filter(([k,v])=>v>1);
+      if (dupes.length) report.push(`  DUPLICATAS: ${dupes.map(([k,v])=>`p${k}x${v}`).join(', ')}`);
+    }
+    const fp = state._fullPayment;
+    if (fp && fp.pendingParcels.length > 0) {
+      const p = fp.pendingParcels[0];
+      report.push(`\nTESTE DE ESCRITA parcela ${p.parcelIndex}:`);
+      try {
+        const testRow = await DB.testWrite(p.saleId, p.parcelIndex);
+        report.push(`  OK: paid_amount agora = ${testRow?.paid_amount}`);
+      } catch (we) {
+        report.push(`  FALHA: ${we?.message || we}`);
+      }
+    }
+    const full = report.join('\n');
+    console.log(full);
+    state._diagnosisText = full;
+    state.modal = 'diagnosis';
+    render();
+  } catch (e) {
+    showToast('Erro no diagnóstico: ' + (e?.message || e), '#A32D2D');
+    console.error(e);
+  }
+}
+
 async function confirmFullPayment() {
   const val = parseFloat(document.getElementById('full-pay-amount')?.value) || 0;
   if (val <= 0) { showToast('Insira um valor válido', '#A32D2D'); return; }
@@ -3307,6 +3342,16 @@ function renderModal() {
     </div>`;
   }
 
+  if (state.modal === 'diagnosis') {
+    return `<div class="modal-overlay" onclick="closeModal()">
+      <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:85vh">
+        <div class="modal-title">🔍 Diagnóstico</div>
+        <pre style="font-size:11px;white-space:pre-wrap;word-break:break-word;background:#f5f5f5;padding:12px;border-radius:8px;max-height:60vh;overflow-y:auto;font-family:monospace">${(state._diagnosisText||'').replace(/</g,'&lt;')}</pre>
+        <button class="btn-cancel" onclick="closeModal()">Fechar</button>
+      </div>
+    </div>`;
+  }
+
   if (state.modal === 'fullPayment' && state._fullPayment) {
     const fp = state._fullPayment;
     return `<div class="modal-overlay" onclick="closeModal()">
@@ -3320,6 +3365,7 @@ function renderModal() {
         </div>
         <button class="btn-primary" onclick="confirmFullPayment()">Registrar pagamento</button>
         <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+        <button onclick="diagnosePayments('${fp.contactId}')" style="width:100%;padding:8px;background:none;border:none;color:#ccc;font-size:11px;cursor:pointer;margin-top:4px">🔍 Diagnóstico</button>
       </div>
     </div>`;
   }
