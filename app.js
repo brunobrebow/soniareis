@@ -334,7 +334,10 @@ async function diagnosePayments(contactId) {
       report.push(`"${s.description}": total=${s.total}, pv=${s.parcel_value}, ${s.parcels}x`);
       const byIdx = {};
       rows.forEach(r => { byIdx[r.parcel_index] = (byIdx[r.parcel_index]||0)+1; });
-      report.push(`  ${rows.length} linhas. ${rows.map(r=>`[i${r.parcel_index}:paid=${r.paid},amt=${r.paid_amount}]`).join(' ')}`);
+      report.push(`  BD: ${rows.map(r=>`[i${r.parcel_index}:paid=${r.paid},amt=${r.paid_amount}]`).join(' ')}`);
+      // Show what the app COMPUTES for each parcel
+      const computed = getSaleParcels(s).map(p => `[i${p.index}:vale${p.amount},falta${p.remaining}${p.paid?',PG':''}]`).join(' ');
+      report.push(`  APP: ${computed}`);
       const dupes = Object.entries(byIdx).filter(([k,v])=>v>1);
       if (dupes.length) report.push(`  DUPLICATAS: ${dupes.map(([k,v])=>`p${k}x${v}`).join(', ')}`);
     }
@@ -2304,7 +2307,7 @@ function renderHome() {
         })()}
       </div>
 
-      <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:#ccc">v111</div>
+      <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:#ccc">v112</div>
     </div>`;
 }
 
