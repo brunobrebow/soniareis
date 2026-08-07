@@ -341,10 +341,10 @@ async function diagnosePayments(contactId) {
     const fp = state._fullPayment;
     if (fp && fp.pendingParcels.length > 0) {
       const p = fp.pendingParcels[0];
-      report.push(`\nTESTE DE ESCRITA parcela ${p.parcelIndex}:`);
+      report.push(`\nTESTE DE ESCRITA (temporário) parcela ${p.parcelIndex}:`);
       try {
         const testRow = await DB.testWrite(p.saleId, p.parcelIndex);
-        report.push(`  OK: paid_amount agora = ${testRow?.paid_amount}`);
+        report.push(`  OK na mesma sessão: paid_amount = ${testRow?.paid_amount}`);
       } catch (we) {
         report.push(`  FALHA: ${we?.message || we}`);
       }
@@ -352,10 +352,35 @@ async function diagnosePayments(contactId) {
     const full = report.join('\n');
     console.log(full);
     state._diagnosisText = full;
+    state._diagnosisContactId = contactId;
     state.modal = 'diagnosis';
     render();
   } catch (e) {
     showToast('Erro no diagnóstico: ' + (e?.message || e), '#A32D2D');
+    console.error(e);
+  }
+}
+
+async function persistTest() {
+  // Writes R$7 to the first pending parcel and does NOT restore.
+  // User closes/reopens app to see if R$7 survived — proves cross-session persistence.
+  const contactId = state._diagnosisContactId;
+  const cSales = state.sales.filter(s => s.contact_id === contactId);
+  let target = null;
+  for (const s of cSales) {
+    const parcels = getSaleParcels(s);
+    const pending = parcels.find(p => !p.paid);
+    if (pending) { target = { saleId: s.id, parcelIndex: pending.index, desc: s.description }; break; }
+  }
+  if (!target) { showToast('Nenhuma parcela pendente para testar', '#C68A00'); return; }
+  try {
+    await DB.markPaid(target.saleId, target.parcelIndex, 7, false);
+    state.payments = await DB.getPayments();
+    state.modal = null;
+    render();
+    showToast(`Gravei R$7 em "${target.desc}". FECHE e ABRA o app, depois volte aqui no diagnóstico e veja se continua R$7.`, '#3B6D11');
+  } catch (e) {
+    showToast('Erro no teste: ' + (e?.message || e), '#A32D2D');
     console.error(e);
   }
 }
@@ -2290,7 +2315,7 @@ function renderHome() {
         })()}
       </div>
 
-      <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:#ccc">v105</div>
+      <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:#ccc">v106</div>
     </div>`;
 }
 
@@ -3433,6 +3458,7 @@ function renderModal() {
         <div class="modal-title">🔍 Diagnóstico</div>
         <pre style="font-size:11px;white-space:pre-wrap;word-break:break-word;background:#f5f5f5;padding:12px;border-radius:8px;max-height:50vh;overflow-y:auto;font-family:monospace">${(state._diagnosisText||'').replace(/</g,'&lt;')}</pre>
         <button class="btn-primary" onclick="cleanAllDuplicates()">🧹 Limpar todas as duplicatas do sistema</button>
+        <button class="btn-primary" style="background:#5B6ABF" onclick="persistTest()">🧪 Testar gravação (grava R$7)</button>
         <button class="btn-cancel" onclick="closeModal()">Fechar</button>
       </div>
     </div>`;
