@@ -451,9 +451,22 @@ async function confirmFullPayment() {
 
     state.modal = null;
     if (appliedCount === 0) {
-      showToast('Nada foi aplicado — parcelas já quitadas?', '#C68A00');
+      // Build a diagnostic explaining WHY nothing was applied
+      let diag = `Nada aplicado. Valor digitado: R$${val}. Total pendente calculado: R$${totalPending}. Parcelas pendentes: ${pendingParcels.length}.`;
+      if (pendingParcels.length === 0) {
+        diag += ` (Todas as parcelas aparecem como pagas — pode ser problema de leitura.)`;
+      }
+      state._diagnosisText = diag + `\n\nDetalhe das vendas:\n` + cSales.map(s => {
+        const ps = getSaleParcels(s);
+        return `"${s.description}" total=${s.total} pv=${s.parcel_value}: ` + ps.map(p => `[i${p.index}:${p.paid?'PAGO':'aberto'},falta${p.remaining}]`).join(' ');
+      }).join('\n');
+      state.modal = 'diagnosis';
+      state._diagnosisContactId = fp.contactId;
+      showToast('Nada foi aplicado — veja o diagnóstico', '#C68A00');
     } else {
-      showToast(`R$ ${appliedTotal.toLocaleString('pt-BR')} distribuído em ${appliedCount} parcela${appliedCount>1?'s':''}!`);
+      // Verify what actually persisted by re-reading those parcels
+      let verifyMsg = `R$ ${appliedTotal.toLocaleString('pt-BR')} distribuído em ${appliedCount} parcela${appliedCount>1?'s':''}!`;
+      showToast(verifyMsg);
     }
     render();
   } catch (e) {
@@ -2307,7 +2320,7 @@ function renderHome() {
         })()}
       </div>
 
-      <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:#ccc">v113</div>
+      <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:#ccc">v114</div>
     </div>`;
 }
 
