@@ -124,10 +124,10 @@ const DB = {
     const updates = {
       paid: !!isFullPayment,
       paid_at: new Date().toISOString(),
-      paid_amount: amount
+      paid_amount: Number(amount) || 0
     };
 
-    // First, clean up any duplicates: keep one row, delete extras
+    // Find existing rows for this parcel
     const { data: rows, error: rowsErr } = await getClient()
       .from('payments')
       .select('id')
@@ -135,25 +135,18 @@ const DB = {
       .eq('parcel_index', parcelIndex);
     if (rowsErr) throw rowsErr;
 
-    if (rows && rows.length > 1) {
-      // Delete all but the first
-      const idsToDelete = rows.slice(1).map(r => r.id);
-      await getClient().from('payments').delete().in('id', idsToDelete);
-    }
-
     let saved = null;
     if (rows && rows.length >= 1) {
-      // UPDATE the surviving row (UPDATE is proven to work via the write test)
-      const keepId = rows[0].id;
+      // UPDATE ALL matching rows (covers duplicates without deleting anything)
       const { data, error } = await getClient()
         .from('payments')
         .update(updates)
-        .eq('id', keepId)
+        .eq('sale_id', saleId)
+        .eq('parcel_index', parcelIndex)
         .select();
       if (error) throw new Error('UPDATE falhou: ' + error.message);
       saved = data && data[0];
     } else {
-      // No row exists — INSERT one
       const { data, error } = await getClient()
         .from('payments')
         .insert({ sale_id: saleId, parcel_index: parcelIndex, ...updates })
@@ -162,7 +155,7 @@ const DB = {
       saved = data && data[0];
     }
 
-    // VERIFY persistence by reading back from DB
+    // VERIFY persistence by reading back
     const { data: check, error: checkErr } = await getClient()
       .from('payments')
       .select('*')
@@ -170,13 +163,12 @@ const DB = {
       .eq('parcel_index', parcelIndex);
     if (checkErr) throw checkErr;
     if (!check || check.length === 0) {
-      throw new Error('Pagamento não persistiu (nenhuma linha após gravar). Verifique permissões RLS no Supabase.');
+      throw new Error('Não persistiu (0 linhas após gravar). RLS?');
     }
-    const persisted = check[0];
-    if (Math.round(Number(persisted.paid_amount) || 0) !== Math.round(amount)) {
-      throw new Error(`Não persistiu: banco tem R$ ${persisted.paid_amount} em vez de R$ ${amount}. Verifique permissões de UPDATE (RLS) no Supabase.`);
+    if (Math.round(Number(check[0].paid_amount) || 0) !== Math.round(Number(amount) || 0)) {
+      throw new Error(`Não persistiu: banco tem ${check[0].paid_amount} vs ${amount}. UPDATE bloqueado (RLS)?`);
     }
-    return persisted;
+    return check[0];
   },
 
   async rawPersistTest(saleId, parcelIndex) {

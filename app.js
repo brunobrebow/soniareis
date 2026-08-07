@@ -559,37 +559,26 @@ async function loadData() {
   state.sales = sales;
   state.payments = payments;
 
-  // Auto-repair: dedupe + ensure every sale has a payment row for each parcel
+  // AUTO-REPAIR TEMPORARIAMENTE DESATIVADO para diagnóstico.
+  // Se os pagamentos persistirem com isto desativado, o auto-repair era o culpado.
+  // (código antigo mantido abaixo, comentado)
+  /*
   try {
     let repaired = false;
     for (const sale of sales) {
       const rowsForSale = state.payments.filter(p => p.sale_id === sale.id);
-      // Detect duplicates (same parcel_index appearing more than once)
       const indexCounts = {};
       rowsForSale.forEach(p => { indexCounts[p.parcel_index] = (indexCounts[p.parcel_index] || 0) + 1; });
       const hasDupes = Object.values(indexCounts).some(c => c > 1);
-      if (hasDupes) {
-        await DB.dedupePayments(sale.id);
-        repaired = true;
-      }
+      if (hasDupes) { await DB.dedupePayments(sale.id); repaired = true; }
       const existing = Object.keys(indexCounts).map(Number);
       const missing = [];
-      for (let i = 0; i < sale.parcels; i++) {
-        if (!existing.includes(i)) missing.push(i);
-      }
-      if (missing.length > 0) {
-        await DB.ensurePaymentRows(sale.id, sale.parcels, existing);
-        repaired = true;
-      }
+      for (let i = 0; i < sale.parcels; i++) { if (!existing.includes(i)) missing.push(i); }
+      if (missing.length > 0) { await DB.ensurePaymentRows(sale.id, sale.parcels, existing); repaired = true; }
     }
-    if (repaired) {
-      // Reload payments to get the clean, correct state
-      state.payments = await DB.getPayments();
-      console.log('Pagamentos reparados.');
-    }
-  } catch (e) {
-    console.error('Erro ao reparar pagamentos:', e);
-  }
+    if (repaired) { state.payments = await DB.getPayments(); }
+  } catch (e) { console.error('Erro ao reparar pagamentos:', e); }
+  */
 }
 
 // ---------- HELPERS ----------
@@ -2318,7 +2307,7 @@ function renderHome() {
         })()}
       </div>
 
-      <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:#ccc">v108</div>
+      <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:#ccc">v109</div>
     </div>`;
 }
 
