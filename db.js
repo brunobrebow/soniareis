@@ -61,7 +61,15 @@ const DB = {
       .select('*')
       .order('created_at', { ascending: false });
     if (error) throw error;
-    return data;
+    // Postgres 'numeric' columns return as strings — coerce to numbers
+    return (data || []).map(s => ({
+      ...s,
+      total: Number(s.total) || 0,
+      parcel_value: Number(s.parcel_value) || 0,
+      parcels: Number(s.parcels) || 1,
+      start_day: Number(s.start_day) || 1,
+      start_month_offset: s.start_month_offset === null || s.start_month_offset === undefined ? null : Number(s.start_month_offset)
+    }));
   },
 
   async addSale(sale) {
@@ -89,7 +97,13 @@ const DB = {
       .from('payments')
       .select('*');
     if (error) throw error;
-    return data;
+    // Postgres 'numeric' columns return as strings — coerce to numbers
+    return (data || []).map(p => ({
+      ...p,
+      paid_amount: Number(p.paid_amount) || 0,
+      parcel_index: Number(p.parcel_index),
+      paid: p.paid === true || p.paid === 'true'
+    }));
   },
 
   async initPayments(saleId, parcels) {
@@ -159,7 +173,7 @@ const DB = {
       throw new Error('Pagamento não persistiu (nenhuma linha após gravar). Verifique permissões RLS no Supabase.');
     }
     const persisted = check[0];
-    if (Math.round(persisted.paid_amount || 0) !== Math.round(amount)) {
+    if (Math.round(Number(persisted.paid_amount) || 0) !== Math.round(amount)) {
       throw new Error(`Não persistiu: banco tem R$ ${persisted.paid_amount} em vez de R$ ${amount}. Verifique permissões de UPDATE (RLS) no Supabase.`);
     }
     return persisted;
@@ -198,7 +212,12 @@ const DB = {
       .eq('sale_id', saleId)
       .order('parcel_index');
     if (error) throw error;
-    return data || [];
+    return (data || []).map(p => ({
+      ...p,
+      paid_amount: Number(p.paid_amount) || 0,
+      parcel_index: Number(p.parcel_index),
+      paid: p.paid === true || p.paid === 'true'
+    }));
   },
 
   async testWrite(saleId, parcelIndex) {

@@ -426,8 +426,8 @@ async function confirmFullPayment() {
       if (!sale) continue;
       const payment = state.payments.find(pm => pm.sale_id === p.saleId && pm.parcel_index === p.parcelIndex);
 
-      const pAmt = getParcelAmount(sale, p.parcelIndex);
-      const alreadyPaid = payment?.paid_amount || 0;
+      const pAmt = Number(getParcelAmount(sale, p.parcelIndex)) || 0;
+      const alreadyPaid = Number(payment?.paid_amount) || 0;
       const parcelRemaining = Math.round(pAmt - alreadyPaid);
       if (parcelRemaining <= 0) continue;
 
@@ -607,7 +607,10 @@ function getColorIndex(id) {
 }
 
 function getParcelAmount(sale, parcelIndex) {
-  return (parcelIndex === sale.parcels - 1) ? sale.total - sale.parcel_value * (sale.parcels - 1) : sale.parcel_value;
+  const total = Number(sale.total) || 0;
+  const parcelValue = Number(sale.parcel_value) || 0;
+  const parcels = Number(sale.parcels) || 1;
+  return (parcelIndex === parcels - 1) ? total - parcelValue * (parcels - 1) : parcelValue;
 }
 
 function getSaleParcels(sale) {
@@ -2315,7 +2318,7 @@ function renderHome() {
         })()}
       </div>
 
-      <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:#ccc">v107</div>
+      <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:#ccc">v108</div>
     </div>`;
 }
 
