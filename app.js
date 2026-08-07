@@ -464,9 +464,18 @@ async function confirmFullPayment() {
       state._diagnosisContactId = fp.contactId;
       showToast('Nada foi aplicado — veja o diagnóstico', '#C68A00');
     } else {
-      // Verify what actually persisted by re-reading those parcels
-      let verifyMsg = `R$ ${appliedTotal.toLocaleString('pt-BR')} distribuído em ${appliedCount} parcela${appliedCount>1?'s':''}!`;
-      showToast(verifyMsg);
+      // Re-read the affected parcels from DB to CONFIRM persistence
+      const freshPayments = await DB.getPayments();
+      let confirmLines = [];
+      for (const p of pendingParcels.slice(0, appliedCount)) {
+        const fresh = freshPayments.find(fp2 => fp2.sale_id === p.saleId && fp2.parcel_index === p.parcelIndex);
+        const sale = cSales.find(s => s.id === p.saleId);
+        confirmLines.push(`${sale?.description}: banco agora tem R$${fresh ? fresh.paid_amount : '?'}`);
+      }
+      state._diagnosisText = `PAGAMENTO DE R$${appliedTotal} REGISTRADO.\n\nOnde caiu (FIFO, mais antigo primeiro):\n` + confirmLines.join('\n') + `\n\nSe os valores acima estão corretos no banco, o pagamento PERSISTIU. Se você não vê na tela, é problema de exibição. Feche e abra o app para confirmar.`;
+      state.modal = 'diagnosis';
+      state._diagnosisContactId = fp.contactId;
+      showToast(`R$ ${appliedTotal.toLocaleString('pt-BR')} registrado — veja onde caiu`, '#3B6D11');
     }
     render();
   } catch (e) {
@@ -2320,7 +2329,7 @@ function renderHome() {
         })()}
       </div>
 
-      <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:#ccc">v114</div>
+      <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:#ccc">v115</div>
     </div>`;
 }
 
