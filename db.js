@@ -152,21 +152,38 @@ const DB = {
       if (insErr) throw new Error('INSERT falhou: ' + insErr.message);
     }
 
-    // VERIFY: read back, must have exactly the amount we set
-    const { data: check, error: checkErr } = await getClient()
-      .from('payments')
-      .select('*')
-      .eq('sale_id', saleId)
-      .eq('parcel_index', parcelIndex);
-    if (checkErr) throw checkErr;
+    // VERIFY with a FRESH connection (proves the write committed, not just read-your-own-write)
+    let freshClient;
+    try {
+      const { createClient } = window.supabase;
+      freshClient = createClient(CONFIG.supabase.url, CONFIG.supabase.key);
+    } catch (e) {
+      freshClient = getClient();
+    }
+    // Retry a couple times in case of read-replica lag
+    let check = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { data, error: checkErr } = await freshClient
+        .from('payments')
+        .select('*')
+        .eq('sale_id', saleId)
+        .eq('parcel_index', parcelIndex);
+      if (checkErr) throw checkErr;
+      if (data && data.length >= 1 && Math.round(Number(data[0].paid_amount) || 0) === Math.round(Number(amount) || 0)) {
+        check = data;
+        break;
+      }
+      check = data;
+      if (attempt < 2) await new Promise(r => setTimeout(r, 400));
+    }
     if (!check || check.length === 0) {
-      throw new Error('Não persistiu (0 linhas após gravar).');
+      throw new Error(`GRAVAÇÃO NÃO COMMITOU: escrevi R$${amount} mas conexão nova não acha a linha. Problema no Supabase.`);
     }
     if (check.length > 1) {
       throw new Error(`Ainda há ${check.length} linhas duplicadas após gravar.`);
     }
     if (Math.round(Number(check[0].paid_amount) || 0) !== Math.round(Number(amount) || 0)) {
-      throw new Error(`Não persistiu: banco tem ${check[0].paid_amount} vs ${amount}.`);
+      throw new Error(`NÃO PERSISTIU: conexão nova mostra R$${check[0].paid_amount} em vez de R$${amount} (após 3 tentativas).`);
     }
     return check[0];
   },

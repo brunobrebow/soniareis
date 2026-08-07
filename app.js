@@ -2329,7 +2329,7 @@ function renderHome() {
         })()}
       </div>
 
-      <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:#ccc">v115</div>
+      <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:#ccc">v116</div>
     </div>`;
 }
 
