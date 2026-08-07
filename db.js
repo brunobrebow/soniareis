@@ -127,7 +127,7 @@ const DB = {
       paid_amount: Number(amount) || 0
     };
 
-    // Find existing rows for this parcel
+    // Find ALL rows for this parcel
     const { data: rows, error: rowsErr } = await getClient()
       .from('payments')
       .select('id')
@@ -135,27 +135,24 @@ const DB = {
       .eq('parcel_index', parcelIndex);
     if (rowsErr) throw rowsErr;
 
-    let saved = null;
-    if (rows && rows.length >= 1) {
-      // UPDATE ALL matching rows (covers duplicates without deleting anything)
-      const { data, error } = await getClient()
-        .from('payments')
-        .update(updates)
-        .eq('sale_id', saleId)
-        .eq('parcel_index', parcelIndex)
-        .select();
-      if (error) throw new Error('UPDATE falhou: ' + error.message);
-      saved = data && data[0];
+    if (rows && rows.length > 1) {
+      // DUPLICATES: delete all but the first, then update the survivor
+      const keepId = rows[0].id;
+      const deleteIds = rows.slice(1).map(r => r.id);
+      const { error: delErr } = await getClient().from('payments').delete().in('id', deleteIds);
+      if (delErr) throw new Error('Não consegui limpar duplicatas: ' + delErr.message);
+      const { error: updErr } = await getClient().from('payments').update(updates).eq('id', keepId);
+      if (updErr) throw new Error('UPDATE falhou: ' + updErr.message);
+    } else if (rows && rows.length === 1) {
+      const { error: updErr } = await getClient().from('payments').update(updates).eq('id', rows[0].id);
+      if (updErr) throw new Error('UPDATE falhou: ' + updErr.message);
     } else {
-      const { data, error } = await getClient()
-        .from('payments')
-        .insert({ sale_id: saleId, parcel_index: parcelIndex, ...updates })
-        .select();
-      if (error) throw new Error('INSERT falhou: ' + error.message);
-      saved = data && data[0];
+      const { error: insErr } = await getClient()
+        .from('payments').insert({ sale_id: saleId, parcel_index: parcelIndex, ...updates });
+      if (insErr) throw new Error('INSERT falhou: ' + insErr.message);
     }
 
-    // VERIFY persistence by reading back
+    // VERIFY: read back, must have exactly the amount we set
     const { data: check, error: checkErr } = await getClient()
       .from('payments')
       .select('*')
@@ -163,10 +160,13 @@ const DB = {
       .eq('parcel_index', parcelIndex);
     if (checkErr) throw checkErr;
     if (!check || check.length === 0) {
-      throw new Error('Não persistiu (0 linhas após gravar). RLS?');
+      throw new Error('Não persistiu (0 linhas após gravar).');
+    }
+    if (check.length > 1) {
+      throw new Error(`Ainda há ${check.length} linhas duplicadas após gravar.`);
     }
     if (Math.round(Number(check[0].paid_amount) || 0) !== Math.round(Number(amount) || 0)) {
-      throw new Error(`Não persistiu: banco tem ${check[0].paid_amount} vs ${amount}. UPDATE bloqueado (RLS)?`);
+      throw new Error(`Não persistiu: banco tem ${check[0].paid_amount} vs ${amount}.`);
     }
     return check[0];
   },
