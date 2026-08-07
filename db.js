@@ -16,12 +16,23 @@ const DB = {
   // ---------- CONTACTS ----------
 
   async getContacts() {
-    const { data, error } = await getClient()
-      .from('contacts')
-      .select('*')
-      .order('name');
-    if (error) throw error;
-    return data;
+    // Paginate to avoid Supabase's 1000-row default limit
+    let allRows = [];
+    let from = 0;
+    const pageSize = 1000;
+    while (true) {
+      const { data, error } = await getClient()
+        .from('contacts')
+        .select('*')
+        .order('name')
+        .range(from, from + pageSize - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      allRows = allRows.concat(data);
+      if (data.length < pageSize) break;
+      from += pageSize;
+    }
+    return allRows;
   },
 
   async addContact(contact) {
@@ -56,13 +67,24 @@ const DB = {
   // ---------- SALES ----------
 
   async getSales() {
-    const { data, error } = await getClient()
-      .from('sales')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) throw error;
+    // Paginate to avoid Supabase's 1000-row default limit
+    let allRows = [];
+    let from = 0;
+    const pageSize = 1000;
+    while (true) {
+      const { data, error } = await getClient()
+        .from('sales')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(from, from + pageSize - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      allRows = allRows.concat(data);
+      if (data.length < pageSize) break;
+      from += pageSize;
+    }
     // Postgres 'numeric' columns return as strings — coerce to numbers
-    return (data || []).map(s => ({
+    return allRows.map(s => ({
       ...s,
       total: Number(s.total) || 0,
       parcel_value: Number(s.parcel_value) || 0,
@@ -93,12 +115,23 @@ const DB = {
   // ---------- PAYMENTS ----------
 
   async getPayments() {
-    const { data, error } = await getClient()
-      .from('payments')
-      .select('*');
-    if (error) throw error;
+    // Supabase returns max 1000 rows by default. Paginate to get ALL payment rows.
+    let allRows = [];
+    let from = 0;
+    const pageSize = 1000;
+    while (true) {
+      const { data, error } = await getClient()
+        .from('payments')
+        .select('*')
+        .range(from, from + pageSize - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      allRows = allRows.concat(data);
+      if (data.length < pageSize) break;
+      from += pageSize;
+    }
     // Postgres 'numeric' columns return as strings — coerce to numbers
-    return (data || []).map(p => ({
+    return allRows.map(p => ({
       ...p,
       paid_amount: Number(p.paid_amount) || 0,
       parcel_index: Number(p.parcel_index),
