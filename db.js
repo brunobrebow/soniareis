@@ -176,24 +176,38 @@ const DB = {
     let log = [];
     // Read current
     const { data: before } = await client.from('payments').select('*').eq('sale_id', saleId).eq('parcel_index', parcelIndex);
-    log.push(`Antes: ${before ? before.length : 0} linha(s), amt=${before && before[0] ? before[0].paid_amount : '?'}`);
+    log.push(`ANTES: ${before ? before.length : 0} linha(s), amt=${before && before[0] ? before[0].paid_amount : '?'}`);
     if (!before || before.length === 0) { log.push('Sem linha — pulando'); return log.join('\n'); }
+    if (before.length > 1) log.push(`⚠️ ${before.length} DUPLICATAS nesta parcela!`);
     const rowId = before[0].id;
 
-    // Test UPDATE with value 7, capture the returned data AND error
+    // UPDATE with value 77
     const { data: updData, error: updErr } = await client
-      .from('payments').update({ paid_amount: 7 }).eq('id', rowId).select();
+      .from('payments').update({ paid_amount: 77 }).eq('id', rowId).select();
     if (updErr) {
-      log.push(`UPDATE erro: ${updErr.message}`);
+      log.push(`UPDATE ERRO: ${updErr.message}`);
+      return log.join('\n');
+    }
+    log.push(`UPDATE retornou: ${updData ? updData.length : 0} linha(s)${updData && updData[0] ? ', amt=' + updData[0].paid_amount : ' — VAZIO (RLS bloqueou UPDATE silenciosamente!)'}`);
+
+    // Create a BRAND NEW client (simulates closing/reopening the app)
+    const { createClient } = window.supabase;
+    const freshClient = createClient(CONFIG.supabase.url, CONFIG.supabase.key);
+    const { data: freshRead } = await freshClient.from('payments').select('*').eq('id', rowId);
+    const freshVal = freshRead && freshRead[0] ? Number(freshRead[0].paid_amount) : null;
+    log.push(`\nLEITURA NOVA (conexão nova): amt=${freshVal}`);
+
+    // Verdict
+    if (freshVal === 77) {
+      log.push(`\n✅ GRAVAÇÃO PERSISTE! O banco está OK. O problema está no app.`);
     } else {
-      log.push(`UPDATE retornou: ${updData ? updData.length : 0} linha(s)` + (updData && updData[0] ? `, amt=${updData[0].paid_amount}` : ' (VAZIO = não atualizou!)'));
+      log.push(`\n❌ NÃO PERSISTE! Escreveu 77 mas leitura nova mostra ${freshVal}. O banco (Supabase RLS) está revertendo. Precisa corrigir permissões.`);
     }
 
-    // Read back immediately
-    const { data: afterUpd } = await client.from('payments').select('*').eq('id', rowId);
-    log.push(`Releitura imediata: amt=${afterUpd && afterUpd[0] ? afterUpd[0].paid_amount : '?'}`);
-
-    log.push(`\nGravado R$7. Se a releitura mostra 7 mas sumir ao reabrir = problema de permissão RLS no Supabase.`);
+    // Restore original
+    const origAmount = Number(before[0].paid_amount) || 0;
+    await client.from('payments').update({ paid_amount: origAmount }).eq('id', rowId);
+    log.push(`\n(valor original R$${origAmount} restaurado)`);
     return log.join('\n');
   },
 

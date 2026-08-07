@@ -362,7 +362,6 @@ async function diagnosePayments(contactId) {
 }
 
 async function persistTest() {
-  // Tests INSERT and UPDATE separately to identify which operation fails to persist.
   const contactId = state._diagnosisContactId;
   const cSales = state.sales.filter(s => s.contact_id === contactId);
   let target = null;
@@ -371,17 +370,19 @@ async function persistTest() {
     const pending = parcels.find(p => !p.paid);
     if (pending) { target = { saleId: s.id, parcelIndex: pending.index, desc: s.description }; break; }
   }
-  if (!target) { showToast('Nenhuma parcela pendente para testar', '#C68A00'); return; }
+  if (!target) {
+    // no pending — just use first sale's first parcel
+    if (cSales.length > 0) target = { saleId: cSales[0].id, parcelIndex: 0, desc: cSales[0].description };
+  }
+  if (!target) { showToast('Nenhuma venda para testar', '#C68A00'); return; }
   try {
-    const client = window.supabase && DB._debugClient ? DB._debugClient() : null;
-    // Use raw operations via DB to test
+    showToast('Testando...', '#5B6ABF');
     const result = await DB.rawPersistTest(target.saleId, target.parcelIndex);
-    state._diagnosisText = `TESTE DE PERSISTÊNCIA em "${target.desc}":\n\n` + result +
-      `\n\n>>> Agora FECHE e ABRA o app, volte no diagnóstico deste cliente e veja se os valores continuam.`;
+    state._diagnosisText = `TESTE em "${target.desc}":\n\n` + result;
     render();
   } catch (e) {
-    showToast('Erro no teste: ' + (e?.message || e), '#A32D2D');
-    console.error(e);
+    state._diagnosisText = 'ERRO NO TESTE: ' + (e?.message || e);
+    render();
   }
 }
 
@@ -2307,7 +2308,7 @@ function renderHome() {
         })()}
       </div>
 
-      <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:#ccc">v109</div>
+      <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:#ccc">v110</div>
     </div>`;
 }
 
