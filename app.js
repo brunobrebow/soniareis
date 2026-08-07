@@ -362,8 +362,7 @@ async function diagnosePayments(contactId) {
 }
 
 async function persistTest() {
-  // Writes R$7 to the first pending parcel and does NOT restore.
-  // User closes/reopens app to see if R$7 survived — proves cross-session persistence.
+  // Tests INSERT and UPDATE separately to identify which operation fails to persist.
   const contactId = state._diagnosisContactId;
   const cSales = state.sales.filter(s => s.contact_id === contactId);
   let target = null;
@@ -374,11 +373,12 @@ async function persistTest() {
   }
   if (!target) { showToast('Nenhuma parcela pendente para testar', '#C68A00'); return; }
   try {
-    await DB.markPaid(target.saleId, target.parcelIndex, 7, false);
-    state.payments = await DB.getPayments();
-    state.modal = null;
+    const client = window.supabase && DB._debugClient ? DB._debugClient() : null;
+    // Use raw operations via DB to test
+    const result = await DB.rawPersistTest(target.saleId, target.parcelIndex);
+    state._diagnosisText = `TESTE DE PERSISTÊNCIA em "${target.desc}":\n\n` + result +
+      `\n\n>>> Agora FECHE e ABRA o app, volte no diagnóstico deste cliente e veja se os valores continuam.`;
     render();
-    showToast(`Gravei R$7 em "${target.desc}". FECHE e ABRA o app, depois volte aqui no diagnóstico e veja se continua R$7.`, '#3B6D11');
   } catch (e) {
     showToast('Erro no teste: ' + (e?.message || e), '#A32D2D');
     console.error(e);
@@ -2315,7 +2315,7 @@ function renderHome() {
         })()}
       </div>
 
-      <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:#ccc">v106</div>
+      <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:#ccc">v107</div>
     </div>`;
 }
 

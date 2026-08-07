@@ -165,6 +165,32 @@ const DB = {
     return persisted;
   },
 
+  async rawPersistTest(saleId, parcelIndex) {
+    const client = getClient();
+    let log = [];
+    // Read current
+    const { data: before } = await client.from('payments').select('*').eq('sale_id', saleId).eq('parcel_index', parcelIndex);
+    log.push(`Antes: ${before ? before.length : 0} linha(s), amt=${before && before[0] ? before[0].paid_amount : '?'}`);
+    if (!before || before.length === 0) { log.push('Sem linha — pulando'); return log.join('\n'); }
+    const rowId = before[0].id;
+
+    // Test UPDATE with value 7, capture the returned data AND error
+    const { data: updData, error: updErr } = await client
+      .from('payments').update({ paid_amount: 7 }).eq('id', rowId).select();
+    if (updErr) {
+      log.push(`UPDATE erro: ${updErr.message}`);
+    } else {
+      log.push(`UPDATE retornou: ${updData ? updData.length : 0} linha(s)` + (updData && updData[0] ? `, amt=${updData[0].paid_amount}` : ' (VAZIO = não atualizou!)'));
+    }
+
+    // Read back immediately
+    const { data: afterUpd } = await client.from('payments').select('*').eq('id', rowId);
+    log.push(`Releitura imediata: amt=${afterUpd && afterUpd[0] ? afterUpd[0].paid_amount : '?'}`);
+
+    log.push(`\nGravado R$7. Se a releitura mostra 7 mas sumir ao reabrir = problema de permissão RLS no Supabase.`);
+    return log.join('\n');
+  },
+
   async getPaymentsForSale(saleId) {
     const { data, error } = await getClient()
       .from('payments')
