@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teste de Gravação</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { font-family: -apple-system, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; }
+    button { width: 100%; padding: 16px; font-size: 16px; background: #993556; color: white; border: none; border-radius: 10px; margin: 10px 0; cursor: pointer; }
+    pre { background: #f5f5f5; padding: 16px; border-radius: 8px; white-space: pre-wrap; word-break: break-word; font-size: 13px; }
+    h1 { font-size: 20px; }
+  </style>
+</head>
+<body>
+  <h1>🧪 Teste de Gravação Direto</h1>
+  <p>Esta página testa se o banco de dados salva os dados de verdade. Não usa cache do app.</p>
+  <button onclick="testar()">Rodar teste de gravação</button>
+  <pre id="resultado">Clique no botão para testar...</pre>
+
+  <script src="config.js"></script>
+  <script>
+    const log = (msg) => {
+      document.getElementById('resultado').textContent += '\n' + msg;
+    };
+
+    async function testar() {
+      document.getElementById('resultado').textContent = 'Iniciando teste...';
+      try {
+        const { createClient } = supabase;
+        const url = CONFIG.supabase.url;
+        const key = CONFIG.supabase.key;
+        log('URL: ' + url);
+
+        const client1 = createClient(url, key);
+
+        // 1. Pega uma linha de pagamento qualquer
+        const { data: rows, error: e1 } = await client1.from('payments').select('*').limit(1);
+        if (e1) { log('ERRO ao ler: ' + e1.message); return; }
+        if (!rows || rows.length === 0) { log('Nenhuma linha de pagamento no banco.'); return; }
+        const row = rows[0];
+        log('\nLinha de teste: id=' + row.id);
+        log('Valor atual (paid_amount): ' + row.paid_amount);
+
+        const valorTeste = 777;
+        const valorOriginal = row.paid_amount || 0;
+
+        // 2. Grava 777 com a conexão 1
+        log('\n>>> Gravando ' + valorTeste + ' com conexão 1...');
+        const { data: upd, error: e2 } = await client1.from('payments').update({ paid_amount: valorTeste }).eq('id', row.id).select();
+        if (e2) { log('ERRO no update: ' + e2.message); return; }
+        log('Update retornou: ' + (upd && upd.length ? upd.length + ' linha, valor=' + upd[0].paid_amount : 'VAZIO'));
+
+        // 3. Lê com a MESMA conexão
+        const { data: r1 } = await client1.from('payments').select('paid_amount').eq('id', row.id);
+        log('Leitura conexão 1 (mesma): ' + (r1 && r1[0] ? r1[0].paid_amount : '?'));
+
+        // 4. Lê com uma conexão NOVA (prova o commit)
+        await new Promise(r => setTimeout(r, 500));
+        const client2 = createClient(url, key);
+        const { data: r2 } = await client2.from('payments').select('paid_amount').eq('id', row.id);
+        log('Leitura conexão 2 (NOVA): ' + (r2 && r2[0] ? r2[0].paid_amount : '?'));
+
+        // 5. Veredito
+        log('\n========================');
+        if (r2 && r2[0] && Number(r2[0].paid_amount) === valorTeste) {
+          log('✅ COMMITOU! O banco salva de verdade.');
+          log('O problema está no APP, não no banco.');
+        } else {
+          log('❌ NÃO COMMITOU! Conexão nova não vê o 777.');
+          log('O banco NÃO está salvando. Problema no Supabase.');
+        }
+        log('========================');
+
+        // 6. Restaura o valor original
+        await client1.from('payments').update({ paid_amount: valorOriginal }).eq('id', row.id);
+        log('\n(valor original ' + valorOriginal + ' restaurado)');
+
+      } catch (err) {
+        log('\nERRO GERAL: ' + (err.message || err));
+      }
+    }
+  </script>
+</body>
+</html>
