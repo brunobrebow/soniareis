@@ -331,7 +331,7 @@ async function diagnosePayments(contactId) {
     let report = [];
     for (const s of cSales) {
       const rows = await DB.getPaymentsForSale(s.id);
-      report.push(`Venda "${s.description}" (${s.parcels}x, offset=${s.start_month_offset ?? 'null'}):`);
+      report.push(`"${s.description}": total=${s.total}, pv=${s.parcel_value}, ${s.parcels}x`);
       const byIdx = {};
       rows.forEach(r => { byIdx[r.parcel_index] = (byIdx[r.parcel_index]||0)+1; });
       report.push(`  ${rows.length} linhas. ${rows.map(r=>`[i${r.parcel_index}:paid=${r.paid},amt=${r.paid_amount}]`).join(' ')}`);
@@ -560,10 +560,7 @@ async function loadData() {
   state.sales = sales;
   state.payments = payments;
 
-  // AUTO-REPAIR TEMPORARIAMENTE DESATIVADO para diagnóstico.
-  // Se os pagamentos persistirem com isto desativado, o auto-repair era o culpado.
-  // (código antigo mantido abaixo, comentado)
-  /*
+  // Auto-repair: dedupe duplicate rows + ensure every parcel has a row
   try {
     let repaired = false;
     for (const sale of sales) {
@@ -579,7 +576,6 @@ async function loadData() {
     }
     if (repaired) { state.payments = await DB.getPayments(); }
   } catch (e) { console.error('Erro ao reparar pagamentos:', e); }
-  */
 }
 
 // ---------- HELPERS ----------
@@ -2308,7 +2304,7 @@ function renderHome() {
         })()}
       </div>
 
-      <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:#ccc">v110</div>
+      <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:#ccc">v111</div>
     </div>`;
 }
 
