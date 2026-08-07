@@ -3378,7 +3378,6 @@ function renderModal() {
         </div>
         <button class="btn-primary" onclick="confirmFullPayment()">Registrar pagamento</button>
         <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
-
       </div>
     </div>`;
   }
