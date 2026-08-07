@@ -306,88 +306,11 @@ function openFullPayment(contactId) {
   render();
 }
 
-async function cleanAllDuplicates() {
-  if (!confirm('Limpar todas as duplicatas do sistema? Isso mantém o pagamento registrado de cada parcela e remove as linhas repetidas. Seguro.')) return;
-  try {
-    let totalRemoved = 0;
-    for (const sale of state.sales) {
-      const removed = await DB.dedupePayments(sale.id);
-      totalRemoved += removed || 0;
-    }
-    // Reload clean state
-    state.payments = await DB.getPayments();
-    state.modal = null;
-    render();
-    showToast(`${totalRemoved} duplicata${totalRemoved !== 1 ? 's' : ''} removida${totalRemoved !== 1 ? 's' : ''}!`);
-  } catch (e) {
-    showToast('Erro ao limpar: ' + (e?.message || e), '#A32D2D');
-    console.error(e);
-  }
-}
 
-async function diagnosePayments(contactId) {
-  try {
-    const cSales = state.sales.filter(s => s.contact_id === contactId);
-    let report = [];
-    for (const s of cSales) {
-      const rows = await DB.getPaymentsForSale(s.id);
-      report.push(`"${s.description}": total=${s.total}, pv=${s.parcel_value}, ${s.parcels}x`);
-      const byIdx = {};
-      rows.forEach(r => { byIdx[r.parcel_index] = (byIdx[r.parcel_index]||0)+1; });
-      report.push(`  BD: ${rows.map(r=>`[i${r.parcel_index}:paid=${r.paid},amt=${r.paid_amount}]`).join(' ')}`);
-      // Show what the app COMPUTES for each parcel
-      const computed = getSaleParcels(s).map(p => `[i${p.index}:vale${p.amount},falta${p.remaining}${p.paid?',PG':''}]`).join(' ');
-      report.push(`  APP: ${computed}`);
-      const dupes = Object.entries(byIdx).filter(([k,v])=>v>1);
-      if (dupes.length) report.push(`  DUPLICATAS: ${dupes.map(([k,v])=>`p${k}x${v}`).join(', ')}`);
-    }
-    const fp = state._fullPayment;
-    if (fp && fp.pendingParcels.length > 0) {
-      const p = fp.pendingParcels[0];
-      report.push(`\nTESTE DE ESCRITA (temporário) parcela ${p.parcelIndex}:`);
-      try {
-        const testRow = await DB.testWrite(p.saleId, p.parcelIndex);
-        report.push(`  OK na mesma sessão: paid_amount = ${testRow?.paid_amount}`);
-      } catch (we) {
-        report.push(`  FALHA: ${we?.message || we}`);
-      }
-    }
-    const full = report.join('\n');
-    console.log(full);
-    state._diagnosisText = full;
-    state._diagnosisContactId = contactId;
-    state.modal = 'diagnosis';
-    render();
-  } catch (e) {
-    showToast('Erro no diagnóstico: ' + (e?.message || e), '#A32D2D');
-    console.error(e);
-  }
-}
 
-async function persistTest() {
-  const contactId = state._diagnosisContactId;
-  const cSales = state.sales.filter(s => s.contact_id === contactId);
-  let target = null;
-  for (const s of cSales) {
-    const parcels = getSaleParcels(s);
-    const pending = parcels.find(p => !p.paid);
-    if (pending) { target = { saleId: s.id, parcelIndex: pending.index, desc: s.description }; break; }
-  }
-  if (!target) {
-    // no pending — just use first sale's first parcel
-    if (cSales.length > 0) target = { saleId: cSales[0].id, parcelIndex: 0, desc: cSales[0].description };
-  }
-  if (!target) { showToast('Nenhuma venda para testar', '#C68A00'); return; }
-  try {
-    showToast('Testando...', '#5B6ABF');
-    const result = await DB.rawPersistTest(target.saleId, target.parcelIndex);
-    state._diagnosisText = `TESTE em "${target.desc}":\n\n` + result;
-    render();
-  } catch (e) {
-    state._diagnosisText = 'ERRO NO TESTE: ' + (e?.message || e);
-    render();
-  }
-}
+
+
+
 
 async function confirmFullPayment() {
   const val = parseFloat(document.getElementById('full-pay-amount')?.value) || 0;
@@ -395,7 +318,6 @@ async function confirmFullPayment() {
   const fp = state._fullPayment;
   if (!fp) return;
 
-  const payTimestamp = new Date().toISOString();
   let appliedCount = 0;
   let appliedTotal = 0;
 
@@ -451,36 +373,13 @@ async function confirmFullPayment() {
 
     state.modal = null;
     if (appliedCount === 0) {
-      // Build a diagnostic explaining WHY nothing was applied
-      let diag = `Nada aplicado. Valor digitado: R$${val}. Total pendente calculado: R$${totalPending}. Parcelas pendentes: ${pendingParcels.length}.`;
-      if (pendingParcels.length === 0) {
-        diag += ` (Todas as parcelas aparecem como pagas — pode ser problema de leitura.)`;
-      }
-      state._diagnosisText = diag + `\n\nDetalhe das vendas:\n` + cSales.map(s => {
-        const ps = getSaleParcels(s);
-        return `"${s.description}" total=${s.total} pv=${s.parcel_value}: ` + ps.map(p => `[i${p.index}:${p.paid?'PAGO':'aberto'},falta${p.remaining}]`).join(' ');
-      }).join('\n');
-      state.modal = 'diagnosis';
-      state._diagnosisContactId = fp.contactId;
-      showToast('Nada foi aplicado — veja o diagnóstico', '#C68A00');
+      showToast('Nada foi aplicado — parcelas já quitadas?', '#C68A00');
     } else {
-      // Re-read the affected parcels from DB to CONFIRM persistence
-      const freshPayments = await DB.getPayments();
-      let confirmLines = [];
-      for (const p of pendingParcels.slice(0, appliedCount)) {
-        const fresh = freshPayments.find(fp2 => fp2.sale_id === p.saleId && fp2.parcel_index === p.parcelIndex);
-        const sale = cSales.find(s => s.id === p.saleId);
-        confirmLines.push(`${sale?.description}: banco agora tem R$${fresh ? fresh.paid_amount : '?'}`);
-      }
-      state._diagnosisText = `PAGAMENTO DE R$${appliedTotal} REGISTRADO.\n\nOnde caiu (FIFO, mais antigo primeiro):\n` + confirmLines.join('\n') + `\n\nSe os valores acima estão corretos no banco, o pagamento PERSISTIU. Se você não vê na tela, é problema de exibição. Feche e abra o app para confirmar.`;
-      state.modal = 'diagnosis';
-      state._diagnosisContactId = fp.contactId;
-      showToast(`R$ ${appliedTotal.toLocaleString('pt-BR')} registrado — veja onde caiu`, '#3B6D11');
+      showToast(`R$ ${appliedTotal.toLocaleString('pt-BR')} registrado!`, '#3B6D11');
     }
     render();
   } catch (e) {
-    const msg = e?.message || e?.hint || e?.details || 'erro desconhecido';
-    showToast('Erro: ' + msg, '#A32D2D');
+    showToast('Erro ao registrar. Tente novamente.', '#A32D2D');
     console.error('confirmFullPayment error:', e);
   }
 }
@@ -2329,7 +2228,7 @@ function renderHome() {
         })()}
       </div>
 
-      <div style="text-align:center;padding:12px 0 4px;font-size:16px;font-weight:bold;color:#993556">VERSÃO 118</div>
+
     </div>`;
 }
 
@@ -3466,18 +3365,6 @@ function renderModal() {
     </div>`;
   }
 
-  if (state.modal === 'diagnosis') {
-    return `<div class="modal-overlay" onclick="closeModal()">
-      <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:85vh">
-        <div class="modal-title">🔍 Diagnóstico</div>
-        <pre style="font-size:11px;white-space:pre-wrap;word-break:break-word;background:#f5f5f5;padding:12px;border-radius:8px;max-height:50vh;overflow-y:auto;font-family:monospace">${(state._diagnosisText||'').replace(/</g,'&lt;')}</pre>
-        <button class="btn-primary" onclick="cleanAllDuplicates()">🧹 Limpar todas as duplicatas do sistema</button>
-        <button class="btn-primary" style="background:#5B6ABF" onclick="persistTest()">🧪 Testar gravação (grava R$7)</button>
-        <button class="btn-cancel" onclick="closeModal()">Fechar</button>
-      </div>
-    </div>`;
-  }
-
   if (state.modal === 'fullPayment' && state._fullPayment) {
     const fp = state._fullPayment;
     return `<div class="modal-overlay" onclick="closeModal()">
@@ -3491,7 +3378,7 @@ function renderModal() {
         </div>
         <button class="btn-primary" onclick="confirmFullPayment()">Registrar pagamento</button>
         <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
-        <button onclick="diagnosePayments('${fp.contactId}')" style="width:100%;padding:8px;background:none;border:none;color:#ccc;font-size:11px;cursor:pointer;margin-top:4px">🔍 Diagnóstico</button>
+
       </div>
     </div>`;
   }
