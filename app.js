@@ -420,7 +420,7 @@ async function confirmFullPayment() {
 
   try {
     // Reload fresh from DB first, so we distribute over the TRUE current state
-    state.payments = await DB.getPayments();
+    await reloadPayments();
 
     // Rebuild the list of pending parcels FRESH (don't trust the stale snapshot)
     const cSales = state.sales.filter(s => s.contact_id === fp.contactId);
@@ -466,7 +466,7 @@ async function confirmFullPayment() {
     }
 
     // Reload payments from DB so local state exactly matches what persisted
-    state.payments = await DB.getPayments();
+    await reloadPayments();
 
     state.modal = null;
     if (appliedCount === 0) {
@@ -589,6 +589,16 @@ async function init() {
     console.error(e);
   }
   render();
+}
+
+// Recarrega pagamentos E o histórico, para a tela refletir o que foi gravado
+async function reloadPayments() {
+  state.payments = await DB.getPayments();
+  try {
+    state.paymentLog = await DB.getPaymentLog();
+  } catch (e) {
+    console.error('payment_log indisponível:', e);
+  }
 }
 
 async function loadData() {
@@ -830,7 +840,7 @@ async function markPaid(saleId, parcelIndex) {
   try {
     const totalPaid = Math.round((payment.paid_amount || 0) + remaining);
     await DB.markPaid(saleId, parcelIndex, totalPaid, true, remaining);
-    state.payments = await DB.getPayments();
+    await reloadPayments();
     state.paidModal = null;
     showToast('Pagamento registrado!');
     render();
@@ -856,7 +866,7 @@ async function markPartialPaid(saleId, parcelIndex) {
   const isFullPayment = totalPaid >= pAmt;
   try {
     await DB.markPaid(saleId, parcelIndex, totalPaid, isFullPayment, amount);
-    state.payments = await DB.getPayments();
+    await reloadPayments();
     state.paidModal = null;
     showToast(`R$ ${amount.toLocaleString('pt-BR')} registrado!`);
 
@@ -1868,7 +1878,7 @@ async function confirmGroupPayment() {
 
       await DB.markPaid(p.saleId, p.parcelIndex, totalPaid, isFullPayment, payAmount);
     }
-    state.payments = await DB.getPayments();
+    await reloadPayments();
 
     const isFullPayment = amount >= gp.totalPending;
     state.modal = null;
@@ -1976,7 +1986,7 @@ async function confirmTransactionPaid() {
       const totalPaid = Math.round(pAmt);
       await DB.markPaid(ref.saleId, ref.parcelIndex, totalPaid, true, Math.round(pAmt - (pm.paid_amount || 0)));
     }
-    state.payments = await DB.getPayments();
+    await reloadPayments();
     state.modal = null;
     showToast('Parcela registrada!');
     render();
@@ -2006,7 +2016,7 @@ async function confirmTransactionPartial() {
       const isFull = totalPaid >= getParcelAmount(sale, ref.parcelIndex);
       await DB.markPaid(ref.saleId, ref.parcelIndex, totalPaid, isFull, payAmt);
     }
-    state.payments = await DB.getPayments();
+    await reloadPayments();
     const isFullPayment = amount >= tp.totalAmount;
     state.modal = null;
     showToast(`R$ ${amount.toLocaleString('pt-BR')} registrado!`);
@@ -2032,7 +2042,7 @@ async function undoTransactionParcel(saleIdsStr, parcelIndex) {
       await DB.undoPaymentByParcel(saleId, parcelIndex);
     }
     // Reload to guarantee local state matches DB
-    state.payments = await DB.getPayments();
+    await reloadPayments();
     showToast('Parcela desfeita!');
     render();
   } catch (e) {
