@@ -283,6 +283,112 @@ async function executeDeleteTransaction() {
   }
 }
 
+function openCobrarModal(contactId) {
+  const contact = getContact(contactId);
+  if (!contact) return;
+  const cSales = state.sales.filter(s => s.contact_id === contactId);
+
+  // Group sales by transaction (same contact + same minute), oldest first
+  const groups = [];
+  const sorted = [...cSales].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  const mesesAbr = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  sorted.forEach(s => {
+    const t = new Date(s.created_at);
+    const key = `${t.getFullYear()}-${t.getMonth()}-${t.getDate()}-${t.getHours()}-${t.getMinutes()}`;
+    let group = groups.find(g => g.key === key);
+    if (!group) {
+      group = { key, dateLabel: `${t.getDate()}/${mesesAbr[t.getMonth()]}`, sales: [] };
+      groups.push(group);
+    }
+    group.sales.push(s);
+  });
+
+  // Build one selectable item per pending parcel of each purchase
+  const items = [];
+  groups.forEach(g => {
+    const numParcels = g.sales[0]?.parcels || 1;
+    const descs = [...new Set(g.sales.map(s => s.description))];
+    const descLabel = descs.length <= 3 ? descs.join(', ') : descs.slice(0, 3).join(', ') + ` +${descs.length - 3}`;
+    for (let pi = 0; pi < numParcels; pi++) {
+      let totalAmount = 0, totalPaid = 0, isPaid = true, dateStr = '';
+      const refs = [];
+      g.sales.forEach(s => {
+        const p = getSaleParcels(s).find(pp => pp.index === pi);
+        if (p) {
+          totalAmount += p.amount;
+          totalPaid += p.paidAmount;
+          if (!p.paid) isPaid = false;
+          if (!dateStr) dateStr = p.dateStr;
+          refs.push({ saleId: s.id, parcelIndex: pi });
+        }
+      });
+      const remaining = Math.round(totalAmount - totalPaid);
+      if (!isPaid && remaining > 0) {
+        items.push({
+          id: `${g.key}|${pi}`,
+          desc: descLabel,
+          groupDate: g.dateLabel,
+          parcelLabel: numParcels > 1 ? `Parcela ${pi + 1}/${numParcels}` : 'Parcela única',
+          dateStr,
+          remaining,
+          refs
+        });
+      }
+    }
+  });
+
+  if (items.length === 0) { showToast('Nenhuma parcela pendente!', '#3B6D11'); return; }
+
+  // All selected by default
+  state._cobrar = {
+    contactId,
+    contactName: contact.name,
+    phone: contact.phone,
+    items,
+    selected: items.map(i => i.id)
+  };
+  state.modal = 'cobrar';
+  render();
+}
+
+function toggleCobrarItem(id) {
+  const cb = state._cobrar;
+  if (!cb) return;
+  const idx = cb.selected.indexOf(id);
+  if (idx >= 0) cb.selected.splice(idx, 1);
+  else cb.selected.push(id);
+  render();
+}
+
+function toggleCobrarAll() {
+  const cb = state._cobrar;
+  if (!cb) return;
+  cb.selected = (cb.selected.length === cb.items.length) ? [] : cb.items.map(i => i.id);
+  render();
+}
+
+function sendCobrar() {
+  const cb = state._cobrar;
+  if (!cb) return;
+  const chosen = cb.items.filter(i => cb.selected.includes(i.id));
+  if (chosen.length === 0) { showToast('Selecione ao menos uma parcela', '#A32D2D'); return; }
+  const total = chosen.reduce((a, i) => a + i.remaining, 0);
+
+  let msg = `Oiiii😍\nTudo bem?\nEstou enviando o valor do seu pix de hoje!\n\n`;
+  chosen.forEach(i => {
+    msg += `• *${i.desc}* (compra ${i.groupDate})\n`;
+    msg += `${i.parcelLabel} · vence ${i.dateStr} · R$ ${i.remaining.toLocaleString('pt-BR')}\n\n`;
+  });
+  msg += `*Total a pagar: R$ ${total.toLocaleString('pt-BR')}*\n\n`;
+  msg += `Nome do Pix: ${CONFIG.pixNome}\nChave PIX celular: ${CONFIG.pixChave}\n\n`;
+  msg += `Obrigada! 💖`;
+
+  const url = `https://wa.me/${cb.phone}?text=${encodeURIComponent(msg)}`;
+  window.open(url, '_blank');
+  state.modal = null;
+  render();
+}
+
 function openFullPayment(contactId) {
   const contact = getContact(contactId);
   if (!contact) return;
@@ -2828,7 +2934,10 @@ function renderDetail(contactId) {
           <button onclick="sendContactSummary('${c.id}')" style="flex:1;padding:11px;background:none;border:1px solid #25D366;border-radius:10px;color:#25D366;font-size:13px;font-weight:500;cursor:pointer">Histórico</button>
         </div>
         <button onclick="openModal('editContact','${c.id}')" style="width:100%;padding:10px;background:none;border:1px solid #e0e0e0;border-radius:10px;color:#666;font-size:14px;cursor:pointer;margin-top:8px">✏️ Editar dados</button>
-        <button onclick="openFullPayment('${c.id}')" style="width:100%;padding:12px;background:#D4537E;border:none;border-radius:10px;color:white;font-size:15px;font-weight:600;cursor:pointer;margin-top:8px">Registrar pagamento</button>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button onclick="openCobrarModal('${c.id}')" style="flex:1;padding:12px;background:#25D366;border:none;border-radius:10px;color:white;font-size:15px;font-weight:600;cursor:pointer">Cobrar</button>
+          <button onclick="openFullPayment('${c.id}')" style="flex:1;padding:12px;background:#D4537E;border:none;border-radius:10px;color:white;font-size:15px;font-weight:600;cursor:pointer">Registrar pagamento</button>
+        </div>
       </div>
       <div class="detail-section">
         <h3>Resumo da cliente</h3>
@@ -3360,6 +3469,43 @@ function renderModal() {
           <input class="form-input" id="tx-paid-amount" type="number" inputmode="decimal" placeholder="Valor pago" />
         </div>
         <button class="btn-primary" style="background:#666" onclick="confirmTransactionPartial()">Registrar valor parcial</button>
+        <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+      </div>
+    </div>`;
+  }
+
+  if (state.modal === 'cobrar' && state._cobrar) {
+    const cb = state._cobrar;
+    const total = cb.items.filter(i => cb.selected.includes(i.id)).reduce((a, i) => a + i.remaining, 0);
+    const allSelected = cb.selected.length === cb.items.length;
+    return `<div class="modal-overlay" onclick="closeModal()">
+      <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:88vh;display:flex;flex-direction:column">
+        <div class="modal-title">Cobrar</div>
+        <div class="modal-subtitle">${cb.contactName}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0 6px">
+          <span style="font-size:12px;color:#888">${cb.items.length} parcela${cb.items.length !== 1 ? 's' : ''} pendente${cb.items.length !== 1 ? 's' : ''}</span>
+          <button onclick="toggleCobrarAll()" style="background:none;border:none;color:#D4537E;font-size:13px;font-weight:500;cursor:pointer;padding:0">${allSelected ? 'Desmarcar todas' : 'Marcar todas'}</button>
+        </div>
+        <div style="overflow-y:auto;flex:1;min-height:0;margin-bottom:4px">
+          ${cb.items.map(i => {
+            const sel = cb.selected.includes(i.id);
+            return `<div onclick="toggleCobrarItem('${i.id}')" style="display:flex;align-items:flex-start;gap:10px;padding:10px;border:1px solid ${sel ? '#D4537E' : '#eee'};background:${sel ? '#FDF2F6' : '#fff'};border-radius:10px;margin-bottom:6px;cursor:pointer">
+              <div style="width:20px;height:20px;border-radius:5px;border:2px solid ${sel ? '#D4537E' : '#ccc'};background:${sel ? '#D4537E' : '#fff'};display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">
+                ${sel ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+              </div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:14px;font-weight:500;color:#1a1a1a">${i.desc}</div>
+                <div style="font-size:12px;color:#888;margin-top:2px">${i.parcelLabel} · vence ${i.dateStr}</div>
+              </div>
+              <div style="font-size:15px;font-weight:600;color:#993556;white-space:nowrap">R$ ${i.remaining.toLocaleString('pt-BR')}</div>
+            </div>`;
+          }).join('')}
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:2px solid #1a1a1a;font-size:16px;font-weight:600;color:#1a1a1a">
+          <span>Total a cobrar</span>
+          <span style="color:#993556">R$ ${total.toLocaleString('pt-BR')}</span>
+        </div>
+        <button class="btn-primary" style="background:#25D366" onclick="sendCobrar()">Enviar cobrança no WhatsApp</button>
         <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
       </div>
     </div>`;
