@@ -374,16 +374,7 @@ function sendCobrar() {
   if (chosen.length === 0) { showToast('Selecione ao menos uma parcela', '#A32D2D'); return; }
   const total = chosen.reduce((a, i) => a + i.remaining, 0);
 
-  let msg = `Oiiii😍\nTudo bem?\nEstou enviando o valor do seu pix de hoje!\n\n`;
-  chosen.forEach(i => {
-    msg += `• *${i.desc}* (compra ${i.groupDate})\n`;
-    msg += `${i.parcelLabel} · vence ${i.dateStr} · R$ ${i.remaining.toLocaleString('pt-BR')}\n\n`;
-  });
-  msg += `*Total a pagar: R$ ${total.toLocaleString('pt-BR')}*\n\n`;
-  msg += `Nome do Pix: ${CONFIG.pixNome}\nChave PIX celular: ${CONFIG.pixChave}\n\n`;
-  msg += `Obrigada! 💖`;
-
-  const url = `https://wa.me/${cb.phone}?text=${encodeURIComponent(msg)}`;
+  const url = `https://wa.me/${cb.phone}?text=${encodeURIComponent(buildCobrancaMsg(total))}`;
   window.open(url, '_blank');
   state.modal = null;
   render();
@@ -490,10 +481,15 @@ async function confirmFullPayment() {
   }
 }
 
+// Mensagem padrão de cobrança — usada em todos os lugares do app
+function buildCobrancaMsg(total) {
+  const valor = Math.round(Number(total) || 0).toLocaleString('pt-BR');
+  return `Oiiii😍\nTudo bem?\nEstou enviando o valor total em aberto do seu pix de hoje: R$ ${valor}\n\nNome do Pix: ${CONFIG.pixNome}\nChave PIX celular: ${CONFIG.pixChave}\n\nObrigada! 💖`;
+}
+
 function getGroupChargeUrl(contact, charges) {
   const total = charges.reduce((a, c) => a + (c.parcel.remaining || c.parcel.amount), 0);
-  let msg = `Oiiii😍\nTudo bem?\nEstou enviando o valor do seu pix de hoje!\n\nValor a pagar hoje: R$ ${total}\nVencimento todo dia: ${charges[0]?.sale.start_day || ''}\n\nNome do Pix: ${CONFIG.pixNome}\nChave PIX celular: ${CONFIG.pixChave}\n\nObrigada! 💖`;
-  return `https://wa.me/${contact.phone}?text=${encodeURIComponent(msg)}`;
+  return `https://wa.me/${contact.phone}?text=${encodeURIComponent(buildCobrancaMsg(total))}`;
 }
 
 function cobrarGrupo(contactId) {
@@ -708,24 +704,11 @@ function getDueCharges(filter) {
 }
 
 function getWhatsappMsg(contact, parcel, sale) {
-  const remaining = parcel.remaining || parcel.amount;
   const allParcels = getSaleParcels(sale);
-  const pendingCount = allParcels.filter(p => !p.paid).length;
   const isAberto = sale.parcels === 1 && allParcels.length === 1;
   const totalPending = allParcels.filter(p => !p.paid).reduce((a, p) => a + (p.remaining || p.amount), 0);
-
-  let msg = `Oiiii😍\nTudo bem?\n`;
-  if (isAberto) {
-    msg += `Estou enviando o seu total em aberto para o pix de hoje!\n\n`;
-    msg += `Valor a pagar hoje: R$ ${totalPending}\n`;
-  } else {
-    msg += `Estou enviando o valor do seu pix de hoje!\n\n`;
-    msg += `Valor a pagar hoje: R$ ${remaining}\n`;
-  }
-  msg += `Vencimento todo dia: ${sale.start_day}\n\n`;
-  msg += `Nome do Pix: ${CONFIG.pixNome}\nChave PIX celular: ${CONFIG.pixChave}\n\n`;
-  msg += `Obrigada! 💖`;
-  return msg;
+  const valor = isAberto ? totalPending : (parcel.remaining || parcel.amount);
+  return buildCobrancaMsg(valor);
 }
 
 function showToast(msg, color = '#3B6D11') {
@@ -2638,7 +2621,7 @@ function agendaCobrarGrupo(contactId) {
     chargeEvt.charges.forEach(c => markCobrada(c.sale.id, c.parcel.index, 2));
     const total = chargeEvt.totalDue;
     const day = chargeEvt.charges[0]?.sale.start_day || '';
-    const msg = `Oiiii😍\nTudo bem?\nEstou enviando o valor do seu pix de hoje!\n\nValor a pagar hoje: R$ ${total}\nVencimento todo dia: ${day}\n\nNome do Pix: ${CONFIG.pixNome}\nChave PIX celular: ${CONFIG.pixChave}\n\nObrigada! 💖`;
+    const msg = buildCobrancaMsg(total);
     window.open(`https://wa.me/${contact.phone}?text=${encodeURIComponent(msg)}`, '_blank');
   }
   closeModal();
@@ -3225,7 +3208,7 @@ function renderModal() {
         const descs = charges.map(c => c.sale.description);
         const uniqueDescs = [...new Set(descs)];
         const day = charges[0]?.sale.start_day || '';
-        const msg = `Oiiii😍\nTudo bem?\nEstou enviando o valor do seu pix de hoje!\n\nValor a pagar hoje: R$ ${total}\nVencimento todo dia: ${day}\n\nNome do Pix: ${CONFIG.pixNome}\nChave PIX celular: ${CONFIG.pixChave}\n\nObrigada! 💖`;
+        const msg = buildCobrancaMsg(total);
         const wppUrl = `https://wa.me/${contact.phone}?text=${encodeURIComponent(msg)}`;
         return `<div class="modal-overlay" onclick="closeModal()">
           <div class="modal-sheet" onclick="event.stopPropagation()">
