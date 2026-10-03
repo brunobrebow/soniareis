@@ -114,6 +114,50 @@ const DB = {
 
   // ---------- PAYMENTS ----------
 
+  // ---------- PAYMENT LOG (histórico de cada pagamento recebido) ----------
+
+  async getPaymentLog() {
+    let allRows = [];
+    let from = 0;
+    const pageSize = 1000;
+    while (true) {
+      const { data, error } = await getClient()
+        .from('payment_log')
+        .select('*')
+        .range(from, from + pageSize - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      allRows = allRows.concat(data);
+      if (data.length < pageSize) break;
+      from += pageSize;
+    }
+    return allRows.map(r => ({
+      ...r,
+      amount: Number(r.amount) || 0,
+      parcel_index: Number(r.parcel_index)
+    }));
+  },
+
+  async logPayment(saleId, parcelIndex, amount) {
+    const value = Math.round(Number(amount) || 0);
+    if (value <= 0) return null;
+    const { data, error } = await getClient()
+      .from('payment_log')
+      .insert({ sale_id: saleId, parcel_index: parcelIndex, amount: value })
+      .select();
+    if (error) throw error;
+    return data && data[0];
+  },
+
+  async deletePaymentLog(saleId, parcelIndex) {
+    const { error } = await getClient()
+      .from('payment_log')
+      .delete()
+      .eq('sale_id', saleId)
+      .eq('parcel_index', parcelIndex);
+    if (error) throw error;
+  },
+
   async getPayments() {
     // Supabase returns max 1000 rows by default. Paginate to get ALL payment rows.
     let allRows = [];
@@ -153,12 +197,22 @@ const DB = {
     return data;
   },
 
-  async markPaid(saleId, parcelIndex, amount, isFullPayment) {
+  // amount = total acumulado da parcela | increment = quanto entrou AGORA
+  async markPaid(saleId, parcelIndex, amount, isFullPayment, increment) {
     const updates = {
       paid: !!isFullPayment,
       paid_at: new Date().toISOString(),
       paid_amount: Number(amount) || 0
     };
+
+    // Registra o valor que entrou agora no histórico de pagamentos
+    if (increment !== undefined && Math.round(Number(increment) || 0) > 0) {
+      try {
+        await this.logPayment(saleId, parcelIndex, increment);
+      } catch (e) {
+        console.error('Erro ao registrar no payment_log:', e);
+      }
+    }
 
     // Find rows for this parcel
     const { data: rows, error: rowsErr } = await getClient()
@@ -243,16 +297,26 @@ const DB = {
   },
 
   async undoPayment(paymentId) {
+    // Descobre a parcela para limpar o histórico dela também
+    const { data: before } = await getClient()
+      .from('payments').select('sale_id, parcel_index').eq('id', paymentId);
     const { data, error } = await getClient()
       .from('payments')
       .update({ paid: false, paid_at: null, paid_amount: 0 })
       .eq('id', paymentId)
       .select();
     if (error) throw error;
+    if (before && before[0]) {
+      try { await this.deletePaymentLog(before[0].sale_id, before[0].parcel_index); }
+      catch (e) { console.error('Erro ao limpar payment_log:', e); }
+    }
     return data && data[0];
   },
 
   async undoPaymentByParcel(saleId, parcelIndex) {
+    // Limpa o histórico de pagamentos desta parcela
+    try { await this.deletePaymentLog(saleId, parcelIndex); }
+    catch (e) { console.error('Erro ao limpar payment_log:', e); }
     // Delete all rows for this parcel and insert one clean unpaid row
     const { error: delErr } = await getClient()
       .from('payments')

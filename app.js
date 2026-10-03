@@ -460,7 +460,7 @@ async function confirmFullPayment() {
       const totalPaid = Math.round(alreadyPaid + payAmount);
       const isFullParcel = totalPaid >= pAmt;
 
-      await DB.markPaid(p.saleId, p.parcelIndex, totalPaid, isFullParcel);
+      await DB.markPaid(p.saleId, p.parcelIndex, totalPaid, isFullParcel, payAmount);
       appliedCount++;
       appliedTotal += payAmount;
     }
@@ -479,6 +479,21 @@ async function confirmFullPayment() {
     showToast('Erro ao registrar. Tente novamente.', '#A32D2D');
     console.error('confirmFullPayment error:', e);
   }
+}
+
+// Soma o que foi EFETIVAMENTE recebido num período, usando o histórico de pagamentos.
+// matchFn recebe a data do pagamento e devolve true se ela entra no período.
+function getRecebidoPeriodo(matchFn) {
+  const log = state.paymentLog;
+  if (log && log.length > 0) {
+    return log
+      .filter(r => r.created_at && matchFn(new Date(r.created_at)))
+      .reduce((a, r) => a + (Number(r.amount) || 0), 0);
+  }
+  // Se o histórico ainda não existe, usa o cálculo antigo para o app não ficar zerado
+  return (state.payments || [])
+    .filter(p => (Number(p.paid_amount) || 0) > 0 && p.paid_at && matchFn(new Date(p.paid_at)))
+    .reduce((a, p) => a + (Number(p.paid_amount) || 0), 0);
 }
 
 // Mensagem padrão de cobrança — usada em todos os lugares do app
@@ -585,6 +600,14 @@ async function loadData() {
   state.contacts = contacts;
   state.sales = sales;
   state.payments = payments;
+
+  // Histórico de pagamentos (cada valor recebido, com sua data)
+  try {
+    state.paymentLog = await DB.getPaymentLog();
+  } catch (e) {
+    state.paymentLog = [];
+    console.error('payment_log indisponível:', e);
+  }
 
   // Auto-repair: dedupe duplicate rows + ensure every parcel has a row
   try {
@@ -806,7 +829,7 @@ async function markPaid(saleId, parcelIndex) {
   const remaining = Math.round(pAmt - (payment.paid_amount || 0));
   try {
     const totalPaid = Math.round((payment.paid_amount || 0) + remaining);
-    await DB.markPaid(saleId, parcelIndex, totalPaid, true);
+    await DB.markPaid(saleId, parcelIndex, totalPaid, true, remaining);
     state.payments = await DB.getPayments();
     state.paidModal = null;
     showToast('Pagamento registrado!');
@@ -832,7 +855,7 @@ async function markPartialPaid(saleId, parcelIndex) {
   const totalPaid = Math.round((payment.paid_amount || 0) + amount);
   const isFullPayment = totalPaid >= pAmt;
   try {
-    await DB.markPaid(saleId, parcelIndex, totalPaid, isFullPayment);
+    await DB.markPaid(saleId, parcelIndex, totalPaid, isFullPayment, amount);
     state.payments = await DB.getPayments();
     state.paidModal = null;
     showToast(`R$ ${amount.toLocaleString('pt-BR')} registrado!`);
@@ -1843,7 +1866,7 @@ async function confirmGroupPayment() {
       const totalPaid = Math.round((payment.paid_amount || 0) + payAmount);
       const isFullPayment = totalPaid >= pAmt2;
 
-      await DB.markPaid(p.saleId, p.parcelIndex, totalPaid, isFullPayment);
+      await DB.markPaid(p.saleId, p.parcelIndex, totalPaid, isFullPayment, payAmount);
     }
     state.payments = await DB.getPayments();
 
@@ -1951,7 +1974,7 @@ async function confirmTransactionPaid() {
       if (!sale || !pm) continue;
       const pAmt = getParcelAmount(sale, ref.parcelIndex);
       const totalPaid = Math.round(pAmt);
-      await DB.markPaid(ref.saleId, ref.parcelIndex, totalPaid, true);
+      await DB.markPaid(ref.saleId, ref.parcelIndex, totalPaid, true, Math.round(pAmt - (pm.paid_amount || 0)));
     }
     state.payments = await DB.getPayments();
     state.modal = null;
@@ -1981,7 +2004,7 @@ async function confirmTransactionPartial() {
       leftover -= payAmt;
       const totalPaid = Math.round((pm.paid_amount || 0) + payAmt);
       const isFull = totalPaid >= getParcelAmount(sale, ref.parcelIndex);
-      await DB.markPaid(ref.saleId, ref.parcelIndex, totalPaid, isFull);
+      await DB.markPaid(ref.saleId, ref.parcelIndex, totalPaid, isFull, payAmt);
     }
     state.payments = await DB.getPayments();
     const isFullPayment = amount >= tp.totalAmount;
@@ -2140,11 +2163,7 @@ function renderHome() {
   }).reduce((a, s) => a + s.total, 0);
 
   // Monthly received (paid this month, includes partials)
-  const recebidoMes = state.payments.filter(p => {
-    if ((p.paid_amount || 0) <= 0 || !p.paid_at) return false;
-    const d = new Date(p.paid_at);
-    return d.getMonth() === mesAtual && d.getFullYear() === anoAtual;
-  }).reduce((a, p) => a + (p.paid_amount || 0), 0);
+  const recebidoMes = getRecebidoPeriodo(d => d.getMonth() === mesAtual && d.getFullYear() === anoAtual);
 
   // Monthly pending (unpaid parcels due this month)
   const mesCharges = getDueCharges('mes');
@@ -2228,11 +2247,7 @@ function renderHome() {
           txKeys.add(`${t.getFullYear()}-${t.getMonth()}-${t.getDate()}-${t.getHours()}-${t.getMinutes()}`);
         });
         const numVendas = txKeys.size;
-        const recebidoHoje = state.payments.filter(p => {
-          if ((p.paid_amount || 0) <= 0 || !p.paid_at) return false;
-          const d = new Date(p.paid_at);
-          return d.getDate() === hoje.getDate() && d.getMonth() === hoje.getMonth() && d.getFullYear() === hoje.getFullYear();
-        }).reduce((a, p) => a + (p.paid_amount || 0), 0);
+        const recebidoHoje = getRecebidoPeriodo(d => d.getDate() === hoje.getDate() && d.getMonth() === hoje.getMonth() && d.getFullYear() === hoje.getFullYear());
 
         return `
           <div class="home-day-summary">
@@ -2653,7 +2668,7 @@ function renderFinanceiro() {
 
   // Recebido no período (inclui pagamentos parciais)
   const paidInPeriod = state.payments.filter(p => (p.paid_amount || 0) > 0 && isInPeriod(p.paid_at));
-  const recebido = paidInPeriod.reduce((a, p) => a + (p.paid_amount || 0), 0);
+  const recebido = getRecebidoPeriodo(d => isInPeriod(d.toISOString()));
 
   // A receber no período (parcelas com vencimento no período, não pagas)
   const aReceberItems = [];
@@ -3399,12 +3414,15 @@ function renderModal() {
 
   if (state.modal === 'recebidoDia') {
     const today = new Date();
-    const paymentsToday = state.payments.filter(p => {
-      if ((p.paid_amount || 0) <= 0 || !p.paid_at) return false;
-      const d = new Date(p.paid_at);
-      return d.getDate() === today.getDate() && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
-    });
-    const totalRecebido = paymentsToday.reduce((a, p) => a + (p.paid_amount || 0), 0);
+    const isToday = d => d.getDate() === today.getDate() && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
+    // Usa o histórico de pagamentos (valor real recebido hoje)
+    const hasLog = state.paymentLog && state.paymentLog.length > 0;
+    const paymentsToday = hasLog
+      ? state.paymentLog.filter(r => r.created_at && isToday(new Date(r.created_at)))
+                        .map(r => ({ sale_id: r.sale_id, value: Number(r.amount) || 0 }))
+      : state.payments.filter(p => (Number(p.paid_amount) || 0) > 0 && p.paid_at && isToday(new Date(p.paid_at)))
+                      .map(p => ({ sale_id: p.sale_id, value: Number(p.paid_amount) || 0 }));
+    const totalRecebido = paymentsToday.reduce((a, p) => a + p.value, 0);
     // Group by contact
     const byContact = {};
     paymentsToday.forEach(p => {
@@ -3412,8 +3430,8 @@ function renderModal() {
       if (!sale) return;
       const cId = sale.contact_id;
       if (!byContact[cId]) byContact[cId] = { contact: getContact(cId), total: 0, items: [] };
-      byContact[cId].total += (p.paid_amount || 0);
-      byContact[cId].items.push({ desc: sale.description, amount: p.paid_amount || 0 });
+      byContact[cId].total += p.value;
+      byContact[cId].items.push({ desc: sale.description, amount: p.value });
     });
     const groups = Object.values(byContact).sort((a, b) => b.total - a.total);
     return `<div class="modal-overlay" onclick="closeModal()">
